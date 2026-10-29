@@ -1,0 +1,3 @@
+# Keep the Unix wrapper executable and preserve the upstream Windows script bytes.
+backend/mvnw text eol=lf
+backend/mvnw.cmd -text

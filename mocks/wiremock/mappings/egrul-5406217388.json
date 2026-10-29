@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/egrul/companies/5406217388"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "5406217388",
+      "ogrn": "1155476023812",
+      "businessType": "LLC",
+      "name": "ООО «ТехноПром»",
+      "registrationDate": "2015-04-22",
+      "status": "ACTIVE",
+      "okved": "25.62",
+      "region": "Новосибирская область"
+    }
+  }
+}

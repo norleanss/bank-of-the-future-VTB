@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/bki/companies/5406217388/credit-report"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "5406217388",
+      "activeCreditsCount": 1,
+      "totalDebtAmount": "2500000.00",
+      "maxOverdueDays12m": 0
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/egrul/companies/165809341759"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "165809341759",
+      "ogrn": "326160000042815",
+      "businessType": "IP",
+      "name": "ИП Соколова Анна Викторовна",
+      "registrationDate": "2026-07-15",
+      "status": "ACTIVE",
+      "okved": "56.10",
+      "region": "Республика Татарстан"
+    }
+  }
+}

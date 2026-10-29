@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/egrul/companies/6673482158"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "6673482158",
+      "ogrn": "1196658019326",
+      "businessType": "LLC",
+      "name": "ООО «Альтаир»",
+      "registrationDate": "2019-11-05",
+      "status": "ACTIVE",
+      "okved": "46.90",
+      "region": "Свердловская область"
+    }
+  }
+}

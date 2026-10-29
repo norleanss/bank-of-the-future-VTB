@@ -1,0 +1,308 @@
+import type { Company, CreditProduct, Dictionaries } from '../types/models';
+
+export const products: CreditProduct[] = [
+  {
+    code: 'LUMP_SUM_LOAN',
+    name: 'Кредит одной суммой',
+    description: 'Вся сумма сразу, фиксированный график платежей',
+    minAmount: '300000.00',
+    maxAmount: '30000000.00',
+    termKind: 'LOAN',
+    termUnit: 'MONTHS',
+    minTerm: 12,
+    maxTerm: 60,
+    autoRenewal: false,
+    rateUnit: 'PERCENT_PER_YEAR',
+    baseRate: 23.5,
+    rateWithSubscription: 14,
+    subscriptionDescription:
+      'Ставка от 14% вместо 23,5%: подписка вместе с «Защитой бизнеса». Без комиссии',
+    fundingModes: ['LUMP_SUM'],
+    repaymentTypes: ['ANNUITY'],
+    minBusinessAgeMonths: 12,
+  },
+  {
+    code: 'CREDIT_LINE',
+    name: 'Возобновляемая кредитная линия',
+    description: 'Деньги частями в пределах лимита, лимит восстанавливается после погашения',
+    minAmount: '300000.00',
+    maxAmount: '30000000.00',
+    termKind: 'TRANCHE',
+    termUnit: 'MONTHS',
+    minTerm: 1,
+    maxTerm: 6,
+    maxTermWithSubscription: 12,
+    agreementTermMonths: 18,
+    autoRenewal: true,
+    rateUnit: 'PERCENT_PER_YEAR',
+    baseRate: 23.5,
+    rateWithSubscription: 14.5,
+    subscriptionDescription:
+      'Ставка от 14,5% вместо 23,5% и транши до 12 месяцев вместо 6. Без комиссии',
+    fundingModes: ['TRANCHES', 'ON_DEMAND'],
+    repaymentTypes: ['INTEREST_ONLY', 'ANNUITY'],
+    minBusinessAgeMonths: 12,
+  },
+  {
+    code: 'OVERDRAFT',
+    name: 'Овердрафт для бизнеса',
+    description: 'Короткие транши до 60–90 дней на кассовые разрывы',
+    minAmount: '50000.00',
+    maxAmount: '20000000.00',
+    termKind: 'TRANCHE',
+    termUnit: 'DAYS',
+    minTerm: 1,
+    maxTerm: 60,
+    maxTermWithSubscription: 90,
+    agreementTermMonths: 12,
+    autoRenewal: true,
+    rateUnit: 'PERCENT_PER_YEAR',
+    baseRate: 26,
+    rateWithSubscription: 13,
+    subscriptionDescription:
+      'Ставка от 13% вместо 26%, транши до 90 дней вместо 60, лимит не снижается при падении оборотов. Комиссия — 1% от суммы, единоразово при выдаче',
+    subscriptionFeePercent: 1,
+    fundingModes: ['ON_DEMAND'],
+    repaymentTypes: ['INTEREST_ONLY'],
+    minBusinessAgeMonths: 0,
+  },
+  {
+    code: 'GAMMA_START',
+    name: 'Гамма-Старт',
+    description: 'Для нового бизнеса с первого дня регистрации, без залога и финансовых документов',
+    minAmount: '50000.00',
+    maxAmount: '1000000.00',
+    termKind: 'TRANCHE',
+    termUnit: 'MONTHS',
+    minTerm: 1,
+    maxTerm: 6,
+    maxTermWithSubscription: 12,
+    agreementTermMonths: 18,
+    autoRenewal: true,
+    rateUnit: 'PERCENT_PER_DAY',
+    baseRate: 0.3,
+    rateWithSubscription: 0.15,
+    subscriptionDescription:
+      'Ставка 0,15% в день вместо 0,3% и транши до 12 месяцев вместо 6. Без комиссии',
+    fundingModes: ['TRANCHES', 'ON_DEMAND'],
+    repaymentTypes: ['INTEREST_ONLY'],
+    minBusinessAgeMonths: 0,
+  },
+];
+
+export const companies: Company[] = [
+  {
+    id: '3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90',
+    inn: '7841256395',
+    ogrn: '1217800123452',
+    businessType: 'LLC',
+    name: 'ООО «Северный ветер»',
+    registrationDate: '2021-05-14',
+    businessAgeMonths: 65,
+    okved: '47.11',
+    region: 'Санкт-Петербург',
+    status: 'ACTIVE',
+  },
+  {
+    id: '118ffe67-739c-4053-94df-9024ddfa44a5',
+    inn: '526218493785',
+    ogrn: '322527500018460',
+    businessType: 'IP',
+    name: 'ИП Морозов Дмитрий Олегович',
+    registrationDate: '2022-09-12',
+    businessAgeMonths: 49,
+    okved: '49.41',
+    region: 'Нижегородская область',
+    status: 'ACTIVE',
+  },
+  {
+    id: 'bd88f8b9-b915-49ff-ab95-85658a48d64b',
+    inn: '6673482158',
+    ogrn: '1196658019326',
+    businessType: 'LLC',
+    name: 'ООО «Альтаир»',
+    registrationDate: '2019-11-05',
+    businessAgeMonths: 83,
+    okved: '46.90',
+    region: 'Свердловская область',
+    status: 'ACTIVE',
+  },
+  {
+    id: '21a1be18-cb82-4fed-b463-8f7f5059fb6e',
+    inn: '5406217388',
+    ogrn: '1155476023812',
+    businessType: 'LLC',
+    name: 'ООО «ТехноПром»',
+    registrationDate: '2015-04-22',
+    businessAgeMonths: 138,
+    okved: '25.62',
+    region: 'Новосибирская область',
+    status: 'ACTIVE',
+  },
+  {
+    id: '9b6d2f4a-8c1e-4a7b-b3d5-2e9f0a1c7d64',
+    inn: '165809341759',
+    ogrn: '326160000042815',
+    businessType: 'IP',
+    name: 'ИП Соколова Анна Викторовна',
+    registrationDate: '2026-07-15',
+    businessAgeMonths: 3,
+    okved: '56.10',
+    region: 'Республика Татарстан',
+    status: 'ACTIVE',
+  },
+  {
+    id: 'c4e8a1b7-2d9f-4f3c-8a6e-5b0d7c2f9e13',
+    inn: '7724185366',
+    ogrn: '1187746182733',
+    businessType: 'LLC',
+    name: 'ООО «Вектор-Строй»',
+    registrationDate: '2018-03-20',
+    businessAgeMonths: 103,
+    okved: '41.20',
+    region: 'Москва',
+    status: 'LIQUIDATING',
+  },
+];
+
+export const dictionaries: Dictionaries = {
+  purposes: [
+    {
+      code: 'WORKING_CAPITAL',
+      label: 'Пополнение оборотных средств',
+      description: 'Регулярные расходы: закупки, зарплата, налоги, сезонность',
+    },
+    {
+      code: 'EQUIPMENT',
+      label: 'Оборудование и развитие',
+      description: 'Разовая крупная покупка или проект',
+    },
+    {
+      code: 'CASH_GAP',
+      label: 'Кассовый разрыв',
+      description: 'Короткие деньги на срок до 60–90 дней',
+    },
+    {
+      code: 'REFINANCING',
+      label: 'Рефинансирование',
+      description: 'Погашение текущих кредитов в другом банке',
+    },
+    {
+      code: 'STARTUP',
+      label: 'Старт бизнеса',
+      description: 'Деньги для только что открывшегося бизнеса',
+    },
+  ],
+  fundingModes: [
+    {
+      code: 'LUMP_SUM',
+      label: 'Вся сумма сразу',
+    },
+    {
+      code: 'TRANCHES',
+      label: 'Частями',
+    },
+    {
+      code: 'ON_DEMAND',
+      label: 'По мере необходимости',
+    },
+  ],
+  repaymentTypes: [
+    {
+      code: 'ANNUITY',
+      label: 'Равными платежами',
+    },
+    {
+      code: 'INTEREST_ONLY',
+      label: 'Только проценты, долг в конце срока',
+    },
+  ],
+  applicationStatuses: [
+    {
+      code: 'DRAFT',
+      label: 'Черновик',
+    },
+    {
+      code: 'SUBMITTED',
+      label: 'Отправлена',
+    },
+    {
+      code: 'ENRICHMENT',
+      label: 'Проверяем данные',
+    },
+    {
+      code: 'SCORING',
+      label: 'Оцениваем заявку',
+    },
+    {
+      code: 'NEED_INFO',
+      label: 'Нужны дополнительные сведения',
+    },
+    {
+      code: 'MANUAL_REVIEW',
+      label: 'На рассмотрении у специалиста',
+    },
+    {
+      code: 'APPROVED',
+      label: 'Одобрено',
+    },
+    {
+      code: 'COUNTER_OFFER',
+      label: 'Предложены другие условия',
+    },
+    {
+      code: 'PENDING_CONFIRMATION',
+      label: 'Ожидает подтверждения банка',
+    },
+    {
+      code: 'OFFER_ACCEPTED',
+      label: 'Готово к подписанию',
+    },
+    {
+      code: 'SIGNED',
+      label: 'Договор подписан',
+    },
+    {
+      code: 'DISBURSED',
+      label: 'Деньги выданы',
+    },
+    {
+      code: 'REJECTED',
+      label: 'Отказ',
+    },
+    {
+      code: 'OFFER_DECLINED',
+      label: 'Вы отказались от предложения',
+    },
+    {
+      code: 'OFFER_EXPIRED',
+      label: 'Срок предложения истёк',
+    },
+    {
+      code: 'CANCELLED',
+      label: 'Заявка отменена',
+    },
+  ],
+  reasonCodes: [
+    {
+      code: 'OVERDUE_GT_60',
+      label: 'Есть просрочка по кредиту больше 60 дней',
+    },
+    {
+      code: 'COMPANY_LIQUIDATED',
+      label: 'Компания ликвидирована',
+    },
+    {
+      code: 'SCORE_GREY_ZONE',
+      label: 'Требуется дополнительная проверка специалистом',
+    },
+    {
+      code: 'DEBT_LOAD_HIGH',
+      label: 'Высокая долговая нагрузка',
+    },
+    {
+      code: 'SOURCE_UNAVAILABLE',
+      label: 'Внешний источник данных временно недоступен',
+    },
+  ],
+};

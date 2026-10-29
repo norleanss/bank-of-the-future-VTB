@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/egrul/companies/7841256395"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "7841256395",
+      "ogrn": "1217800123452",
+      "businessType": "LLC",
+      "name": "ООО «Северный ветер»",
+      "registrationDate": "2021-05-14",
+      "status": "ACTIVE",
+      "okved": "47.11",
+      "region": "Санкт-Петербург"
+    }
+  }
+}

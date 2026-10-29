@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/fns/companies/7841256395/tax-debts"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "7841256395",
+      "taxDebtAmount": "0.00"
+    }
+  }
+}

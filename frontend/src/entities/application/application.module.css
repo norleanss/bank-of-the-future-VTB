@@ -1,0 +1,64 @@
+.list {
+  display: grid;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 24px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  padding: 24px 0;
+}
+.row:last-child {
+  border-bottom: 0;
+}
+.row h3 {
+  margin: 8px 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.number {
+  font-size: 12px;
+  color: var(--muted);
+}
+.amount {
+  font-size: 20px;
+  text-align: end;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.amount small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 6px;
+}
+.rowArrow {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+@media (hover: hover) and (pointer: fine) {
+  .row:hover h3 {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+}
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) 20px;
+    gap: 16px;
+  }
+  .amount {
+    grid-column: 1;
+    text-align: start;
+    font-size: 18px;
+  }
+  .rowArrow {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+}

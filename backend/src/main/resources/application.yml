@@ -1,0 +1,201 @@
+spring:
+  application:
+    name: credit-conveyor-backend
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/credit_conveyor}
+    username: ${DB_USER:credit}
+    password: ${DB_PASSWORD:credit}
+
+  jackson:
+    # В ответах поля без значения не передаются (контракт 0.2)
+    default-property-inclusion: non_null
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # схема только через Flyway
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  # Обработка заявки идёт событиями между модулями; журнал событий — в схеме events (миграция V10)
+  modulith:
+    events:
+      jdbc:
+        schema: events
+      republish-outstanding-events-on-restart: true
+      # Доставленное событие удаляется — в журнале остаются только недоставленные
+      completion-mode: delete
+
+  # Сообщения валидации и ошибок — на русском, независимо от языка браузера
+  web:
+    locale: ru
+    locale-resolver: fixed
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api/v1
+  error:
+    # Тексты исключений наружу не отдаём: ошибки API оформляет ApiExceptionHandler
+    include-message: never
+  tomcat:
+    # Сколько Tomcat дочитывает из отклонённого по размеру запроса, чтобы ответить 413, а не оборвать соединение.
+    # Лимиты загрузки — от app.documents.max-size (ApplicationConfiguration)
+    max-swallow-size: 100MB
+    # Заголовок части multipart (имя файла в Content-Disposition): по умолчанию 512 байт — длинное
+    # кириллическое имя файла не помещалось, и загрузка отклонялась
+    max-part-header-size: 8KB
+
+app:
+  # Часовой пояс для бизнес-дат (возраст бизнеса, сроки)
+  time-zone: Europe/Moscow
+  security:
+    jwt:
+      # Ключ подписи токенов (HS256), не короче 32 байт. Пустой — случайный ключ при каждом старте
+      secret: ${JWT_SECRET:}
+      ttl: 24h
+      issuer: credit-conveyor
+  demo:
+    # Кто входит через POST /auth/demo-login: демо-клиент со всеми демо-компаниями и андеррайтер
+    client-login: client
+    underwriter-login: underwriter
+  offer:
+    # Сколько действует предложение клиенту; после — статус OFFER_EXPIRED
+    validity: P7D
+    # Как часто фоновая задача ищет истёкшие предложения
+    expiry-check-interval: PT1M
+  signing:
+    # Код подписания: срок жизни и число попыток ввода; в демо код возвращается в ответе (demoCode)
+    code-ttl: PT5M
+    max-attempts: 3
+  backoffice:
+    # Наибольшая ставка, которую может назначить сотрудник банка (нижняя граница — ставка каталога)
+    max-rate:
+      percent-per-year: 60
+      percent-per-day: 1
+  documents:
+    # Документы заявки: размер файла, допустимые форматы (проверяются по содержимому) и сколько документов у заявки
+    max-size: 10MB
+    allowed-types: application/pdf, image/jpeg, image/png
+    max-per-application: 20
+  cors:
+    # Откуда фронтенд может обращаться к API (через запятую)
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  notifications:
+    # Поток SSE: ping, чтобы прокси и браузер не закрыли соединение; срок жизни соединения (EventSource переподключится)
+    heartbeat-interval: PT30S
+    stream-timeout: PT30M
+  # Базовая политика команды (docs/scoring.md). Полосы проверяются сверху вниз, первая подходящая даёт баллы
+  scoring:
+    factors:
+      profitability:        # (выручка − расходы) / выручка, %
+        bands:
+          - { when: GE, value: 20, points: 25 }
+          - { when: GE, value: 10, points: 18 }
+          - { when: GT, value: 0, points: 8 }
+        otherwise: 0
+      debt-load:            # платежи по кредитам × 12 / выручка, %
+        bands:
+          - { when: LT, value: 10, points: 20 }
+          - { when: LT, value: 25, points: 12 }
+          - { when: LE, value: 40, points: 4 }
+        otherwise: 0
+      overdue-days:         # максимальная просрочка за 12 месяцев по БКИ, дней
+        bands:
+          - { when: LE, value: 0, points: 20 }
+          - { when: LE, value: 30, points: 10 }
+        otherwise: 0
+      tax-debt:             # налоговый долг по ФНС, ₽
+        bands:
+          - { when: LE, value: 0, points: 10 }
+          - { when: LE, value: 50000, points: 5 }
+        otherwise: 0
+      business-age:         # месяцев с регистрации
+        bands:
+          - { when: GE, value: 36, points: 15 }
+          - { when: GE, value: 12, points: 10 }
+          - { when: GE, value: 3, points: 5 }
+        otherwise: 0
+      active-credits:       # действующих кредитов по БКИ
+        bands:
+          - { when: LE, value: 1, points: 10 }
+          - { when: LE, value: 2, points: 5 }
+        otherwise: 0
+    weak-factor-share: 0.5
+    grades:
+      - { grade: A, min-score: 85 }
+      - { grade: B, min-score: 70 }
+      - { grade: C, min-score: 55 }
+      - { grade: D, min-score: 40 }
+      - { grade: E, min-score: 0 }
+    reject-below: 40
+    review-below: 70
+    stop-factors:
+      company-statuses: [LIQUIDATING, LIQUIDATED]
+      max-overdue-days: 60
+      max-tax-debt: 300000
+    # Если заявленный продукт не подходит по возрасту бизнеса — предлагаем этот
+    alternative-product: GAMMA_START
+    soft-factors:
+      overdue-days-from: 31
+      loss: true
+    required-fields:
+      "[LUMP_SUM_LOAN]": [financials.annualRevenue, financials.annualExpenses, financials.monthlyDebtPayment]
+      "[CREDIT_LINE]": [financials.annualRevenue, financials.annualExpenses, financials.monthlyDebtPayment]
+      "[OVERDRAFT]": [financials.annualRevenue, financials.annualExpenses, financials.monthlyDebtPayment, financials.bankMonthlyTurnover]
+    limits:
+      rounding-step: 10000
+      method:
+        "[LUMP_SUM_LOAN]": REVENUE
+        "[CREDIT_LINE]": REVENUE
+        "[OVERDRAFT]": TURNOVER
+        "[GAMMA_START]": PRODUCT_MAX
+      revenue-share-by-grade:
+        "[A]": 0.5
+        "[B]": 0.4
+      turnover-share: 0.5
+    # N: одобрение на большую сумму — предварительное, после согласия клиента его подтверждает андеррайтер
+    preliminary-above: 1000000
+
+# Адреса моков внешних источников (WireMock)
+integrations:
+  egrul:
+    base-url: ${EGRUL_BASE_URL:http://localhost:8089/egrul}
+  fns:
+    base-url: ${FNS_BASE_URL:http://localhost:8089/fns}
+  bki:
+    base-url: ${BKI_BASE_URL:http://localhost:8089/bki}
+  # Источник не ответил после всех повторов — заявка уходит на ручную проверку
+  connect-timeout: 1s
+  read-timeout: 2s
+  retries: 2
+  retry-delay: 500ms
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    # Показываем исходный контракт с примерами, а не сгенерированный из кода
+    url: /api/v1/openapi.yaml
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      # Готовность принимать запросы включает доступность базы (используется healthcheck в docker-compose)
+      group:
+        readiness:
+          include: readinessState,db

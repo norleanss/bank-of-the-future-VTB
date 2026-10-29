@@ -1,0 +1,9 @@
+{
+  "priority": 10,
+  "request": { "method": "GET", "urlPathPattern": "/egrul/companies/[0-9]+" },
+  "response": {
+    "status": 404,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": "NOT_FOUND", "message": "Компания не найдена в реестре" }
+  }
+}

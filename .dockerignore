@@ -1,0 +1,26 @@
+# Only the sources required by the two image builds enter the context.
+# Local .env files, node_modules, target, dist, E2E tests and traces stay out.
+**
+!backend/
+backend/**
+!backend/pom.xml
+!backend/src/
+!backend/src/**
+!docs/
+docs/**
+!docs/api/
+docs/api/**
+!docs/api/openapi.yaml
+!frontend/
+frontend/**
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/tsconfig.json
+!frontend/vite.config.ts
+!frontend/Dockerfile
+!frontend/nginx.conf
+!frontend/src/
+!frontend/src/**
+!frontend/public/
+!frontend/public/**

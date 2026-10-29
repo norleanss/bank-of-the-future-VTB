@@ -1,0 +1,36 @@
+.feedback {
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: var(--muted);
+  font-size: 14px;
+}
+.error {
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: var(--danger-surface);
+  color: var(--danger);
+  margin-block: 16px;
+}
+.error p {
+  margin-top: 0;
+}
+.progress {
+  margin-bottom: 20px;
+}
+.progressMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.progressMeta > span:last-child {
+  color: var(--text);
+  font-weight: 500;
+}
+.progressTrack {
+  margin-top: 12px;
+}

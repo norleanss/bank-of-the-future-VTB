@@ -1,0 +1,29 @@
+.formFields {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.formFields > * {
+  min-width: 0;
+}
+.fullWidth,
+.creditDetails {
+  grid-column: 1 / -1;
+}
+.creditDetails {
+  color: var(--muted);
+  font-size: 14px;
+}
+.creditDetails summary {
+  cursor: pointer;
+  min-height: 32px;
+  padding-block: 6px;
+}
+.creditDetails p {
+  margin: 12px 0 0;
+}
+@container (min-width: 640px) {
+  .formFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

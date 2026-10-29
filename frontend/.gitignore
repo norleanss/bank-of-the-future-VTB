@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.npm-cache/
+*.tsbuildinfo
+playwright-report/
+test-results/
+test-results-http/
+test-results-live/
+test-results-docker/
+.env
+.env.*
+!.env.example

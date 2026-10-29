@@ -1,0 +1,2698 @@
+openapi: 3.0.3
+info:
+  title: Кредитный конвейер МСБ — API
+  version: 0.2.3-draft
+  description: |
+    API кредитного конвейера для малого бизнеса: кабинет клиента и бэк-офис банка.
+
+    Соглашения:
+    - Пути начинаются с `/api/v1`, авторизация — `Authorization: Bearer <accessToken>` из `POST /auth/demo-login`.
+    - Даты — ISO 8601 с часовым поясом (`2026-10-22T14:05:00+03:00`), даты без времени — `ГГГГ-ММ-ДД`.
+    - Деньги — строкой с двумя знаками (`"1500000.00"`), чтобы JavaScript не терял точность.
+    - Ставки — числом в процентах (`23.50`), единица — в `rateUnit`.
+    - Сроки — `term` + `termUnit` (`MONTHS` / `DAYS`); при сравнении месяц = 30 дней.
+    - Коды — на английском, русские подписи — `GET /dictionaries`.
+    - В ответах нет `null`: поле без значения отсутствует.
+    - `PATCH` — JSON Merge Patch (RFC 7386): поле не передано — не меняется, `null` — очищается,
+      вложенные объекты сливаются по полям.
+    - Ошибки — Problem Details (RFC 9457); в `errors[].field` — путь через точку (`financials.annualRevenue`,
+      `documentIds[0]`).
+    - Пагинация — `page` (с 0) и `size`, ответ в обёртке `...Page`.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Локальный бэкенд
+  - url: http://localhost:4010
+    description: Мок-сервер Prism (без префикса /api/v1)
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+    description: Вход-заглушка для демо
+  - name: Dictionaries
+    description: Справочники с русскими подписями кодов
+  - name: Products
+    description: Каталог и подбор кредитных продуктов
+  - name: Company
+    description: Компании текущего клиента
+  - name: Applications
+    description: Заявки клиента
+  - name: Notifications
+    description: Уведомления в кабинете
+  - name: Backoffice
+    description: Обработка заявок сотрудником банка (андеррайтером)
+
+paths:
+  /auth/demo-login:
+    post:
+      tags: [Auth]
+      summary: Войти как демо-пользователь выбранной роли
+      description: |
+        Демо-вход без пароля: токен заранее созданного пользователя выбранной роли.
+        У демо-клиента несколько компаний (по одной на сценарий) — `user.companies`.
+      security: []
+      operationId: demoLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoLoginRequest'
+            examples:
+              client:
+                value: { role: CLIENT }
+              underwriter:
+                value: { role: UNDERWRITER }
+      responses:
+        '200':
+          description: Токен и пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              examples:
+                client:
+                  value:
+                    accessToken: eyJhbGciOiJIUzI1NiJ9.demo-client
+                    expiresIn: 86400
+                    user:
+                      id: 7d1f3c2e-1b2a-4c5d-8e9f-0a1b2c3d4e5f
+                      fullName: Иван Петров
+                      role: CLIENT
+                      companies:
+                        - id: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                          name: ООО «Северный ветер»
+                          inn: '7841256395'
+                          businessType: LLC
+                          demoScenario: Одобрение
+                        - id: 118ffe67-739c-4053-94df-9024ddfa44a5
+                          name: ИП Морозов Дмитрий Олегович
+                          inn: '526218493785'
+                          businessType: IP
+                          demoScenario: Ручная проверка
+                        - id: bd88f8b9-b915-49ff-ab95-85658a48d64b
+                          name: ООО «Альтаир»
+                          inn: '6673482158'
+                          businessType: LLC
+                          demoScenario: 'Отказ: просрочка'
+                        - id: 21a1be18-cb82-4fed-b463-8f7f5059fb6e
+                          name: ООО «ТехноПром»
+                          inn: '5406217388'
+                          businessType: LLC
+                          demoScenario: Предварительное одобрение
+                        - id: 9b6d2f4a-8c1e-4a7b-b3d5-2e9f0a1c7d64
+                          name: ИП Соколова Анна Викторовна
+                          inn: '165809341759'
+                          businessType: IP
+                          demoScenario: Гамма-Старт
+                        - id: c4e8a1b7-2d9f-4f3c-8a6e-5b0d7c2f9e13
+                          name: ООО «Вектор-Строй»
+                          inn: '7724185366'
+                          businessType: LLC
+                          demoScenario: 'Отказ: ликвидация'
+                underwriter:
+                  value:
+                    accessToken: eyJhbGciOiJIUzI1NiJ9.demo-underwriter
+                    expiresIn: 86400
+                    user:
+                      id: 5c3e7a9d-1f4b-4b2e-8d6a-9e2c4f7b1a38
+                      fullName: Мария Смирнова
+                      role: UNDERWRITER
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      operationId: getMe
+      responses:
+        '200':
+          description: Пользователь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              example:
+                id: 7d1f3c2e-1b2a-4c5d-8e9f-0a1b2c3d4e5f
+                fullName: Иван Петров
+                role: CLIENT
+                companies:
+                  - id: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    name: ООО «Северный ветер»
+                    inn: '7841256395'
+                    businessType: LLC
+                    demoScenario: Одобрение
+                  - id: 118ffe67-739c-4053-94df-9024ddfa44a5
+                    name: ИП Морозов Дмитрий Олегович
+                    inn: '526218493785'
+                    businessType: IP
+                    demoScenario: Ручная проверка
+                  - id: bd88f8b9-b915-49ff-ab95-85658a48d64b
+                    name: ООО «Альтаир»
+                    inn: '6673482158'
+                    businessType: LLC
+                    demoScenario: 'Отказ: просрочка'
+                  - id: 21a1be18-cb82-4fed-b463-8f7f5059fb6e
+                    name: ООО «ТехноПром»
+                    inn: '5406217388'
+                    businessType: LLC
+                    demoScenario: Предварительное одобрение
+                  - id: 9b6d2f4a-8c1e-4a7b-b3d5-2e9f0a1c7d64
+                    name: ИП Соколова Анна Викторовна
+                    inn: '165809341759'
+                    businessType: IP
+                    demoScenario: Гамма-Старт
+                  - id: c4e8a1b7-2d9f-4f3c-8a6e-5b0d7c2f9e13
+                    name: ООО «Вектор-Строй»
+                    inn: '7724185366'
+                    businessType: LLC
+                    demoScenario: 'Отказ: ликвидация'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /dictionaries:
+    get:
+      tags: [Dictionaries]
+      summary: Все справочники с русскими подписями
+      description: Фронт показывает подписи, а в запросах и ответах использует коды.
+      operationId: getDictionaries
+      responses:
+        '200':
+          description: Справочники
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dictionaries'
+              example:
+                purposes:
+                  - { code: WORKING_CAPITAL, label: Пополнение оборотных средств, description: 'Регулярные расходы: закупки, зарплата, налоги, сезонность' }
+                  - { code: EQUIPMENT, label: Оборудование и развитие, description: 'Разовая крупная покупка или проект' }
+                  - { code: CASH_GAP, label: Кассовый разрыв, description: 'Короткие деньги на срок до 60–90 дней' }
+                  - { code: REFINANCING, label: Рефинансирование, description: 'Погашение текущих кредитов в другом банке' }
+                  - { code: STARTUP, label: Старт бизнеса, description: 'Деньги для только что открывшегося бизнеса' }
+                fundingModes:
+                  - { code: LUMP_SUM, label: Вся сумма сразу }
+                  - { code: TRANCHES, label: Частями }
+                  - { code: ON_DEMAND, label: По мере необходимости }
+                repaymentTypes:
+                  - { code: ANNUITY, label: Равными платежами }
+                  - { code: INTEREST_ONLY, label: 'Только проценты, долг в конце срока' }
+                applicationStatuses:
+                  - { code: DRAFT, label: Черновик }
+                  - { code: SUBMITTED, label: Отправлена }
+                  - { code: ENRICHMENT, label: Проверяем данные }
+                  - { code: SCORING, label: Оцениваем заявку }
+                  - { code: NEED_INFO, label: Нужны дополнительные сведения }
+                  - { code: MANUAL_REVIEW, label: На рассмотрении у специалиста }
+                  - { code: APPROVED, label: Одобрено }
+                  - { code: COUNTER_OFFER, label: Предложены другие условия }
+                  - { code: PENDING_CONFIRMATION, label: Ожидает подтверждения банка }
+                  - { code: OFFER_ACCEPTED, label: Готово к подписанию }
+                  - { code: SIGNED, label: Договор подписан }
+                  - { code: DISBURSED, label: Деньги выданы }
+                  - { code: REJECTED, label: Отказ }
+                  - { code: OFFER_DECLINED, label: Вы отказались от предложения }
+                  - { code: OFFER_EXPIRED, label: Срок предложения истёк }
+                  - { code: CANCELLED, label: Заявка отменена }
+                reasonCodes:
+                  - { code: COMPANY_NOT_FOUND, label: 'Компания не найдена в ЕГРЮЛ/ЕГРИП' }
+                  - { code: SOURCE_UNAVAILABLE, label: 'Внешний источник данных временно недоступен' }
+                  - { code: COMPANY_LIQUIDATING, label: 'Компания в процессе ликвидации' }
+                  - { code: COMPANY_LIQUIDATED, label: 'Компания ликвидирована' }
+                  - { code: OVERDUE_GT_60, label: 'Есть просрочка по кредиту больше 60 дней' }
+                  - { code: TAX_DEBT_HIGH, label: 'Налоговая задолженность выше допустимой' }
+                  - { code: PRODUCT_NOT_ELIGIBLE, label: 'Продукт недоступен по возрасту бизнеса' }
+                  - { code: MISSING_FIELDS, label: 'Не хватает сведений в анкете' }
+                  - { code: SCORE_LOW, label: 'Оценка платёжеспособности ниже требуемой' }
+                  - { code: LOW_PROFITABILITY, label: 'Низкая рентабельность бизнеса' }
+                  - { code: DEBT_LOAD_HIGH, label: 'Высокая долговая нагрузка' }
+                  - { code: OVERDUE_HISTORY, label: 'Были просрочки по кредитам' }
+                  - { code: TAX_DEBT, label: 'Есть налоговая задолженность' }
+                  - { code: YOUNG_BUSINESS, label: 'Небольшой срок работы бизнеса' }
+                  - { code: MANY_ACTIVE_CREDITS, label: 'Много действующих кредитов' }
+                  - { code: SCORE_GREY_ZONE, label: 'Требуется дополнительная проверка специалистом' }
+                  - { code: OVERDUE_31_60, label: 'Была просрочка по кредиту от 31 до 60 дней' }
+                  - { code: LOSS_MAKING, label: 'Расходы за год не меньше выручки' }
+                  - { code: INSUFFICIENT_FINANCES, label: 'Финансовых показателей недостаточно для минимальной суммы продукта' }
+                  - { code: AMOUNT_ABOVE_LIMIT, label: 'Запрошенная сумма больше доступного лимита' }
+                  - { code: PROCESSING_ERROR, label: 'Автоматическая обработка не завершилась' }
+                  - { code: PRODUCT_CONDITIONS_CHANGED, label: 'Условия продукта изменились после отправки заявки' }
+                  - { code: MANUAL_REJECT, label: 'Отказ по итогам проверки специалистом' }
+                  - { code: MANUAL_COUNTER_OFFER, label: 'Специалист банка предложил другие условия' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Каталог кредитных продуктов
+      operationId: listProducts
+      responses:
+        '200':
+          description: Продукты
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+              example:
+                - code: LUMP_SUM_LOAN
+                  name: Кредит одной суммой
+                  description: 'Вся сумма сразу, фиксированный график платежей'
+                  minAmount: '300000.00'
+                  maxAmount: '30000000.00'
+                  termKind: LOAN
+                  termUnit: MONTHS
+                  minTerm: 12
+                  maxTerm: 60
+                  autoRenewal: false
+                  rateUnit: PERCENT_PER_YEAR
+                  baseRate: 23.50
+                  rateWithSubscription: 14.00
+                  subscriptionDescription: 'Ставка от 14% вместо 23,5%: подписка вместе с «Защитой бизнеса». Без комиссии'
+                  fundingModes: [LUMP_SUM]
+                  repaymentTypes: [ANNUITY]
+                  minBusinessAgeMonths: 12
+                - code: CREDIT_LINE
+                  name: Возобновляемая кредитная линия
+                  description: 'Деньги частями в пределах лимита, лимит восстанавливается после погашения'
+                  minAmount: '300000.00'
+                  maxAmount: '30000000.00'
+                  termKind: TRANCHE
+                  termUnit: MONTHS
+                  minTerm: 1
+                  maxTerm: 6
+                  maxTermWithSubscription: 12
+                  agreementTermMonths: 18
+                  autoRenewal: true
+                  rateUnit: PERCENT_PER_YEAR
+                  baseRate: 23.50
+                  rateWithSubscription: 14.50
+                  subscriptionDescription: 'Ставка от 14,5% вместо 23,5% и транши до 12 месяцев вместо 6. Без комиссии'
+                  fundingModes: [TRANCHES, ON_DEMAND]
+                  repaymentTypes: [INTEREST_ONLY, ANNUITY]
+                  minBusinessAgeMonths: 12
+                - code: OVERDRAFT
+                  name: Овердрафт для бизнеса
+                  description: 'Короткие транши до 60–90 дней на кассовые разрывы'
+                  minAmount: '50000.00'
+                  maxAmount: '20000000.00'
+                  termKind: TRANCHE
+                  termUnit: DAYS
+                  minTerm: 1
+                  maxTerm: 60
+                  maxTermWithSubscription: 90
+                  agreementTermMonths: 12
+                  autoRenewal: true
+                  rateUnit: PERCENT_PER_YEAR
+                  baseRate: 26.00
+                  rateWithSubscription: 13.00
+                  subscriptionDescription: 'Ставка от 13% вместо 26%, транши до 90 дней вместо 60, лимит не снижается при падении оборотов. Комиссия — 1% от суммы, единоразово при выдаче'
+                  subscriptionFeePercent: 1.00
+                  fundingModes: [ON_DEMAND]
+                  repaymentTypes: [INTEREST_ONLY]
+                  minBusinessAgeMonths: 0
+                - code: GAMMA_START
+                  name: Гамма-Старт
+                  description: 'Для нового бизнеса с первого дня регистрации, без залога и финансовых документов'
+                  minAmount: '50000.00'
+                  maxAmount: '1000000.00'
+                  termKind: TRANCHE
+                  termUnit: MONTHS
+                  minTerm: 1
+                  maxTerm: 6
+                  maxTermWithSubscription: 12
+                  agreementTermMonths: 18
+                  autoRenewal: true
+                  rateUnit: PERCENT_PER_DAY
+                  baseRate: 0.30
+                  rateWithSubscription: 0.15
+                  subscriptionDescription: 'Ставка 0,15% в день вместо 0,3% и транши до 12 месяцев вместо 6. Без комиссии'
+                  fundingModes: [TRANCHES, ON_DEMAND]
+                  repaymentTypes: [INTEREST_ONLY]
+                  minBusinessAgeMonths: 0
+
+  /products/{code}:
+    get:
+      tags: [Products]
+      summary: Продукт по коду
+      operationId: getProduct
+      parameters:
+        - $ref: '#/components/parameters/ProductCode'
+      responses:
+        '200':
+          description: Продукт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /products/match:
+    post:
+      tags: [Products]
+      summary: Подбор продукта по потребности клиента
+      description: |
+        Все продукты каталога с отметкой и причинами. Подписку не передают — проверяются оба варианта:
+        `suitable` — подходит на базовых условиях, `requiresSubscription` — только с подпиской (что она даёт — в `reasons`).
+        Рекомендован первый с `recommended: true`. Возраст бизнеса берётся по `companyId`.
+        У подходящих продуктов — `estimate`: предварительный ежемесячный платёж по сумме и сроку из запроса,
+        без подписки и с подпиской. Это ориентир для выбора: итоговый платёж — в `offer.monthlyPayment` после
+        решения банка (сумма может быть меньше запрошенной).
+      operationId: matchProducts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductMatchRequest'
+            example:
+              companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+              purpose: CASH_GAP
+              requestedAmount: '1500000.00'
+              term: 75
+              termUnit: DAYS
+              fundingMode: ON_DEMAND
+      responses:
+        '200':
+          description: Результат подбора
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductMatchResponse'
+              example:
+                items:
+                  - product: { code: OVERDRAFT, name: Овердрафт для бизнеса }
+                    suitable: false
+                    requiresSubscription: true
+                    recommended: true
+                    reasons: ['Транш до 60 дней; с подпиской — до 90 дней, ставка от 13% вместо 26%, комиссия 1% от суммы']
+                    estimate:
+                      monthlyPaymentWithSubscription: '16250.00'
+                      subscriptionFee: '15000.00'
+                      repaymentType: INTEREST_ONLY
+                  - product: { code: CREDIT_LINE, name: Возобновляемая кредитная линия }
+                    suitable: true
+                    requiresSubscription: false
+                    recommended: false
+                    reasons: []
+                    estimate:
+                      monthlyPayment: '29375.00'
+                      monthlyPaymentWithSubscription: '18125.00'
+                      repaymentType: INTEREST_ONLY
+                  - product: { code: LUMP_SUM_LOAN, name: Кредит одной суммой }
+                    suitable: false
+                    requiresSubscription: false
+                    recommended: false
+                    reasons: ['Минимальный срок кредита — 12 месяцев', 'Выдаётся только всей суммой сразу']
+                  - product: { code: GAMMA_START, name: Гамма-Старт }
+                    suitable: false
+                    requiresSubscription: false
+                    recommended: false
+                    reasons: ['Максимальная сумма — 1 000 000 ₽']
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /companies:
+    get:
+      tags: [Company]
+      summary: Компании текущего клиента
+      description: Компании пользователя (как в `user.companies`) с данными из ЕГРЮЛ/ЕГРИП. Сотруднику банка — 403.
+      operationId: listCompanies
+      responses:
+        '200':
+          description: Компании
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Company'
+              example:
+                - id: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                  inn: '7841256395'
+                  ogrn: '1217800123452'
+                  businessType: LLC
+                  name: ООО «Северный ветер»
+                  registrationDate: '2021-05-14'
+                  businessAgeMonths: 65
+                  okved: '47.11'
+                  region: Санкт-Петербург
+                  status: ACTIVE
+                - id: 118ffe67-739c-4053-94df-9024ddfa44a5
+                  inn: '526218493785'
+                  ogrn: '322527500018460'
+                  businessType: IP
+                  name: ИП Морозов Дмитрий Олегович
+                  registrationDate: '2022-09-12'
+                  businessAgeMonths: 49
+                  okved: '49.41'
+                  region: Нижегородская область
+                  status: ACTIVE
+                - id: bd88f8b9-b915-49ff-ab95-85658a48d64b
+                  inn: '6673482158'
+                  ogrn: '1196658019326'
+                  businessType: LLC
+                  name: ООО «Альтаир»
+                  registrationDate: '2019-11-05'
+                  businessAgeMonths: 83
+                  okved: '46.90'
+                  region: Свердловская область
+                  status: ACTIVE
+                - id: 21a1be18-cb82-4fed-b463-8f7f5059fb6e
+                  inn: '5406217388'
+                  ogrn: '1155476023812'
+                  businessType: LLC
+                  name: ООО «ТехноПром»
+                  registrationDate: '2015-04-22'
+                  businessAgeMonths: 138
+                  okved: '25.62'
+                  region: Новосибирская область
+                  status: ACTIVE
+                - id: 9b6d2f4a-8c1e-4a7b-b3d5-2e9f0a1c7d64
+                  inn: '165809341759'
+                  ogrn: '326160000042815'
+                  businessType: IP
+                  name: ИП Соколова Анна Викторовна
+                  registrationDate: '2026-07-15'
+                  businessAgeMonths: 3
+                  okved: '56.10'
+                  region: Республика Татарстан
+                  status: ACTIVE
+                - id: c4e8a1b7-2d9f-4f3c-8a6e-5b0d7c2f9e13
+                  inn: '7724185366'
+                  ogrn: '1187746182733'
+                  businessType: LLC
+                  name: ООО «Вектор-Строй»
+                  registrationDate: '2018-03-20'
+                  businessAgeMonths: 103
+                  okved: '41.20'
+                  region: Москва
+                  status: LIQUIDATING
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /companies/{id}:
+    get:
+      tags: [Company]
+      summary: Компания по id
+      description: Только компания из списка компаний пользователя, иначе 403.
+      operationId: getCompany
+      parameters:
+        - $ref: '#/components/parameters/CompanyId'
+      responses:
+        '200':
+          description: Компания
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Company'
+              example:
+                id: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                inn: '7841256395'
+                ogrn: '1217800123452'
+                businessType: LLC
+                name: ООО «Северный ветер»
+                registrationDate: '2021-05-14'
+                businessAgeMonths: 65
+                okved: '47.11'
+                region: Санкт-Петербург
+                status: ACTIVE
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /applications:
+    get:
+      tags: [Applications]
+      summary: Заявки компаний текущего клиента
+      description: |
+        Без `companyId` — заявки всех компаний пользователя, новые первыми.
+        С `companyId` — только этой компании; компания не из списка пользователя — 403.
+      operationId: listApplications
+      parameters:
+        - name: companyId
+          in: query
+          description: Показать заявки только этой компании
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Страница заявок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationSummaryPage'
+              example:
+                content:
+                  - id: 9b2c1d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e
+                    number: CR-2026-000123
+                    status: APPROVED
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    companyName: ООО «Северный ветер»
+                    purpose: CASH_GAP
+                    productCode: OVERDRAFT
+                    requestedAmount: '1500000.00'
+                    createdAt: '2026-10-22T14:05:00+03:00'
+                    updatedAt: '2026-10-22T14:06:10+03:00'
+                    unreadNotifications: 1
+                page: 0
+                size: 20
+                totalElements: 1
+                totalPages: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Applications]
+      summary: Создать черновик заявки
+      description: |
+        Обязателен только `companyId` (компания пользователя), потом её не изменить; остальное — через PATCH.
+        `subscription` — кнопка «Оформить» (`false`) или «Оформить с подпиской» (`true`).
+      operationId: createApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreateRequest'
+            example:
+              companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+              productCode: OVERDRAFT
+              purpose: CASH_GAP
+              requestedAmount: '1500000.00'
+              term: 75
+              termUnit: DAYS
+              fundingMode: ON_DEMAND
+              subscription: true
+      responses:
+        '201':
+          description: Черновик создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+              example:
+                id: 9b2c1d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e
+                number: CR-2026-000123
+                status: DRAFT
+                companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                productCode: OVERDRAFT
+                purpose: CASH_GAP
+                requestedAmount: '1500000.00'
+                term: 75
+                termUnit: DAYS
+                fundingMode: ON_DEMAND
+                collateral: false
+                subscription: true
+                reasons: []
+                availableActions: [EDIT, SUBMIT, CANCEL]
+                nextStepHint: Заполните анкету и отправьте заявку
+                createdAt: '2026-10-22T14:05:00+03:00'
+                updatedAt: '2026-10-22T14:05:00+03:00'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /applications/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [Applications]
+      summary: Карточка заявки
+      description: |
+        Кнопки — `availableActions`, подсказка клиенту — `nextStepHint`. Пока заявка обрабатывается
+        (`SUBMITTED`, `ENRICHMENT`, `SCORING`), опрашивайте этот эндпоинт или слушайте `GET /notifications/stream`.
+      operationId: getApplication
+      responses:
+        '200':
+          description: Заявка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+              examples:
+                approved:
+                  summary: Одобрено автоматически, ждёт решения клиента
+                  value:
+                    id: 9b2c1d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e
+                    number: CR-2026-000123
+                    status: APPROVED
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    productCode: OVERDRAFT
+                    purpose: CASH_GAP
+                    requestedAmount: '800000.00'
+                    term: 60
+                    termUnit: DAYS
+                    fundingMode: ON_DEMAND
+                    repaymentType: INTEREST_ONLY
+                    financials:
+                      annualRevenue: '17434414.00'
+                      annualExpenses: '10468403.00'
+                      bankMonthlyTurnover: '1450000.00'
+                      monthlyDebtPayment: '85000.00'
+                    collateral: false
+                    subscription: true
+                    offer:
+                      productCode: OVERDRAFT
+                      productName: Овердрафт для бизнеса
+                      amount: '800000.00'
+                      term: 60
+                      termUnit: DAYS
+                      termKind: TRANCHE
+                      agreementTermMonths: 12
+                      rate: 13.00
+                      rateUnit: PERCENT_PER_YEAR
+                      monthlyPayment: '8666.67'
+                      subscription: true
+                      subscriptionFee: '8000.00'
+                      preliminary: false
+                      expiresAt: '2026-10-29T14:06:10+03:00'
+                    reasons: []
+                    availableActions: [ACCEPT_OFFER, DECLINE_OFFER]
+                    nextStepHint: Одобрен лимит 800 000 ₽, транши до 60 дней. Примите предложение до 29.10.2026
+                    createdAt: '2026-10-22T14:05:00+03:00'
+                    submittedAt: '2026-10-22T14:05:40+03:00'
+                    updatedAt: '2026-10-22T14:06:10+03:00'
+                needInfo:
+                  summary: Банк запросил дополнительные сведения
+                  value:
+                    id: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+                    number: CR-2026-000124
+                    status: NEED_INFO
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    productCode: LUMP_SUM_LOAN
+                    purpose: EQUIPMENT
+                    requestedAmount: '2000000.00'
+                    term: 36
+                    termUnit: MONTHS
+                    fundingMode: LUMP_SUM
+                    repaymentType: ANNUITY
+                    financials:
+                      bankMonthlyTurnover: '900000.00'
+                      monthlyDebtPayment: '0.00'
+                    collateral: false
+                    subscription: false
+                    openInfoRequest:
+                      id: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b
+                      message: 'Укажите в анкете: выручка за год, расходы за год'
+                      requestedFields: [financials.annualRevenue, financials.annualExpenses]
+                      requestedDocuments: []
+                      createdBy: SYSTEM
+                      createdAt: '2026-10-22T15:01:00+03:00'
+                      status: OPEN
+                    reasons:
+                      - { code: MISSING_FIELDS, message: 'Укажите в анкете: выручка за год, расходы за год' }
+                    availableActions: [RESPOND_INFO, UPLOAD_DOCUMENT, CANCEL]
+                    nextStepHint: Банку нужны дополнительные сведения — дополните анкету и ответьте на запрос
+                    createdAt: '2026-10-22T15:00:00+03:00'
+                    submittedAt: '2026-10-22T15:00:30+03:00'
+                    updatedAt: '2026-10-22T15:01:00+03:00'
+                preliminary:
+                  summary: Крупная сумма — предварительное одобрение
+                  value:
+                    id: 2d3e4f5a-6b7c-4d8e-9f0a-1b2c3d4e5f6a
+                    number: CR-2026-000125
+                    status: APPROVED
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    productCode: LUMP_SUM_LOAN
+                    purpose: EQUIPMENT
+                    requestedAmount: '5000000.00'
+                    term: 36
+                    termUnit: MONTHS
+                    fundingMode: LUMP_SUM
+                    repaymentType: ANNUITY
+                    financials:
+                      annualRevenue: '47851341.00'
+                      annualExpenses: '33025870.00'
+                      bankMonthlyTurnover: '4000000.00'
+                      monthlyDebtPayment: '120000.00'
+                    collateral: false
+                    subscription: false
+                    offer:
+                      productCode: LUMP_SUM_LOAN
+                      productName: Кредит одной суммой
+                      amount: '5000000.00'
+                      term: 36
+                      termUnit: MONTHS
+                      termKind: LOAN
+                      rate: 23.50
+                      rateUnit: PERCENT_PER_YEAR
+                      monthlyPayment: '194854.03'
+                      subscription: false
+                      preliminary: true
+                      expiresAt: '2026-10-29T16:00:00+03:00'
+                    reasons: []
+                    availableActions: [ACCEPT_OFFER, DECLINE_OFFER]
+                    nextStepHint: Предварительно одобрено 5 000 000 ₽ на 36 месяцев. Примите предложение до 29.10.2026 — после этого условия подтвердит специалист банка
+                    createdAt: '2026-10-22T15:58:00+03:00'
+                    submittedAt: '2026-10-22T15:59:00+03:00'
+                    updatedAt: '2026-10-22T16:00:00+03:00'
+                rejected:
+                  summary: Автоматический отказ
+                  value:
+                    id: 3e4f5a6b-7c8d-4e9f-8a0b-1c2d3e4f5a6b
+                    number: CR-2026-000126
+                    status: REJECTED
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    productCode: CREDIT_LINE
+                    purpose: WORKING_CAPITAL
+                    requestedAmount: '3000000.00'
+                    term: 6
+                    termUnit: MONTHS
+                    fundingMode: TRANCHES
+                    repaymentType: INTEREST_ONLY
+                    financials:
+                      annualRevenue: '12000000.00'
+                      annualExpenses: '11000000.00'
+                      bankMonthlyTurnover: '1000000.00'
+                      monthlyDebtPayment: '300000.00'
+                    collateral: false
+                    subscription: false
+                    reasons:
+                      - { code: OVERDUE_GT_60, message: 'Есть просрочка по кредиту больше 60 дней', advice: 'Погасите просрочку и подайте заявку снова через 3 месяца' }
+                    availableActions: []
+                    nextStepHint: К сожалению, банк не может выдать кредит по этой заявке. Причины и что можно сделать — в карточке заявки
+                    createdAt: '2026-10-22T16:10:00+03:00'
+                    submittedAt: '2026-10-22T16:10:20+03:00'
+                    updatedAt: '2026-10-22T16:10:25+03:00'
+                expired:
+                  summary: Клиент не ответил на предложение за 7 дней
+                  value:
+                    id: 5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d
+                    number: CR-2026-000128
+                    status: OFFER_EXPIRED
+                    companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                    productCode: CREDIT_LINE
+                    purpose: WORKING_CAPITAL
+                    requestedAmount: '1000000.00'
+                    term: 6
+                    termUnit: MONTHS
+                    fundingMode: TRANCHES
+                    repaymentType: INTEREST_ONLY
+                    financials:
+                      annualRevenue: '17434414.00'
+                      annualExpenses: '10468403.00'
+                      bankMonthlyTurnover: '1450000.00'
+                      monthlyDebtPayment: '85000.00'
+                    collateral: false
+                    subscription: false
+                    offer:
+                      productCode: CREDIT_LINE
+                      productName: Возобновляемая кредитная линия
+                      amount: '1000000.00'
+                      term: 6
+                      termUnit: MONTHS
+                      termKind: TRANCHE
+                      agreementTermMonths: 18
+                      rate: 23.50
+                      rateUnit: PERCENT_PER_YEAR
+                      monthlyPayment: '19583.33'
+                      subscription: false
+                      preliminary: false
+                      expiresAt: '2026-10-22T10:00:00+03:00'
+                    reasons: []
+                    availableActions: []
+                    nextStepHint: Срок действия предложения истёк. Вы можете подать новую заявку
+                    createdAt: '2026-10-15T09:58:00+03:00'
+                    submittedAt: '2026-10-15T09:59:00+03:00'
+                    updatedAt: '2026-10-22T10:00:00+03:00'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Applications]
+      summary: Обновить черновик
+      description: |
+        Разрешено в `DRAFT` и `NEED_INFO`. `"financials": {"annualExpenses": null}` очищает только расходы,
+        `"financials": null` — все финансовые данные. `term` и `termUnit` меняются вместе; `companyId` в запросе — 400.
+        В `NEED_INFO` меняются только `financials` и поля из `openInfoRequest.requestedFields`; `productCode`,
+        `requestedAmount`, `term`, `termUnit` и `subscription` после отправки не меняются. Иначе — 400 с этими полями
+        в `errors`; переданное то же значение изменением не считается.
+      operationId: updateApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationPatchRequest'
+            example:
+              repaymentType: INTEREST_ONLY
+              financials:
+                annualRevenue: '17434414.00'
+                annualExpenses: null
+                bankMonthlyTurnover: '1450000.00'
+              subscription: true
+      responses:
+        '200':
+          description: Обновлённая заявка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/submit:
+    post:
+      tags: [Applications]
+      summary: Отправить заявку
+      description: |
+        Проверяет полноту и условия продукта (сумма, срок с учётом подписки, возраст бизнеса компании)
+        и переводит заявку в `SUBMITTED`; несоответствие — 400 с полем в `errors`.
+        Дальше асинхронно: `ENRICHMENT` (ЕГРЮЛ, ФНС, БКИ) → `SCORING` → решение — обычно за несколько секунд;
+        статус читать через `GET /applications/{id}`. Повторная отправка безопасна.
+      operationId: submitApplication
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '202':
+          description: Заявка принята в обработку
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/cancel:
+    post:
+      tags: [Applications]
+      summary: Отменить заявку
+      description: Разрешено в `DRAFT`, `NEED_INFO`, `MANUAL_REVIEW`. От предложения в `APPROVED`/`COUNTER_OFFER` клиент отказывается через `offer/decline`.
+      operationId: cancelApplication
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Заявка отменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/history:
+    get:
+      tags: [Applications]
+      summary: История статусов заявки
+      operationId: getApplicationHistory
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Переходы статусов, от старых к новым
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatusHistoryItem'
+              example:
+                - { toStatus: DRAFT, actorType: CLIENT, createdAt: '2026-10-22T14:05:00+03:00' }
+                - { fromStatus: DRAFT, toStatus: SUBMITTED, actorType: CLIENT, createdAt: '2026-10-22T14:05:40+03:00' }
+                - { fromStatus: SUBMITTED, toStatus: ENRICHMENT, actorType: SYSTEM, createdAt: '2026-10-22T14:05:41+03:00' }
+                - { fromStatus: ENRICHMENT, toStatus: SCORING, actorType: SYSTEM, createdAt: '2026-10-22T14:05:55+03:00' }
+                - { fromStatus: SCORING, toStatus: APPROVED, actorType: SYSTEM, createdAt: '2026-10-22T14:06:10+03:00' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /applications/{id}/documents:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [Applications]
+      summary: Документы заявки
+      description: Все загруженные документы заявки, старые первыми.
+      operationId: listDocuments
+      responses:
+        '200':
+          description: Документы
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Applications]
+      summary: Загрузить документ
+      description: |
+        Разрешено, когда в `availableActions` есть `UPLOAD_DOCUMENT` (`NEED_INFO`), иначе 409. Форматы — PDF, JPG,
+        PNG (проверяется и содержимое файла, а не только расширение), размер — до 10 МБ, документов у заявки — до 20;
+        лимиты настраиваются на сервере. Неверный формат, пустой файл или лишний документ — 400 по полю `file`,
+        больше лимита размера — 413. Документ прикладывают к ответу на запрос сведений (`documentIds`).
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, documentType]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                documentType:
+                  $ref: '#/components/schemas/DocumentType'
+      responses:
+        '201':
+          description: Документ загружен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+              example:
+                id: 6f7a8b9c-0d1e-4f2a-8b3c-4d5e6f7a8b9c
+                documentType: FINANCIAL_STATEMENT
+                fileName: отчётность_2025.pdf
+                mimeType: application/pdf
+                sizeBytes: 482113
+                uploadedAt: '2026-10-22T15:10:00+03:00'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          description: Файл слишком большой
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /applications/{id}/documents/{documentId}/content:
+    get:
+      tags: [Applications]
+      summary: Скачать документ
+      description: Файл как загружен; имя — в `Content-Disposition`.
+      operationId: downloadDocument
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Файл
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /applications/{id}/info-requests/{requestId}/response:
+    post:
+      tags: [Applications]
+      summary: Ответить на запрос банка
+      description: |
+        Перед ответом клиент дозаполняет поля через `PATCH /applications/{id}`
+        и при необходимости загружает документы. Ответ закрывает запрос. Запрос системы (`createdBy: SYSTEM`) —
+        заявка снова уходит в обработку (`ENRICHMENT`); запрос сотрудника (`EMPLOYEE`) — возвращается к нему
+        (`MANUAL_REVIEW`). Незаполненные поля из `requestedFields` — 400 с полями в `errors`; `requestId`
+        не открытого запроса — 404. Если после отправки изменились условия продукта (продукт снят, сумма или срок
+        вне условий) — клиент это исправить не может, поэтому ответ принимается, а заявка уходит в `MANUAL_REVIEW`
+        с причиной `PRODUCT_CONDITIONS_CHANGED`.
+      operationId: respondInfoRequest
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InfoRequestResponse'
+            example:
+              comment: Добавил выручку и расходы за 12 месяцев
+              documentIds: []
+      responses:
+        '200':
+          description: Заявка после ответа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/offer/accept:
+    post:
+      tags: [Applications]
+      summary: Принять предложение
+      description: |
+        Обычное одобрение — `OFFER_ACCEPTED`, предварительное — `PENDING_CONFIRMATION` (ждёт андеррайтера).
+        Предложение действует 7 дней (`offer.expiresAt`), потом заявка уходит в `OFFER_EXPIRED`; принять просроченное —
+        409 `…/offer-expired`. В `PENDING_CONFIRMATION` предложение не истекает.
+      operationId: acceptOffer
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Заявка после принятия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Действие недоступно в текущем статусе, срок предложения истёк или заявку только что изменили
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalidTransition:
+                  value:
+                    type: https://credit.example/problems/invalid-transition
+                    title: Действие недоступно
+                    status: 409
+                    detail: 'Нельзя принять предложение в статусе REJECTED'
+                offerExpired:
+                  value:
+                    type: https://credit.example/problems/offer-expired
+                    title: Срок предложения истёк
+                    status: 409
+                    detail: 'Предложение действовало до 29.10.2026. Вы можете подать новую заявку'
+                    expiresAt: '2026-10-29T14:06:10+03:00'
+                concurrentModification:
+                  value:
+                    type: https://credit.example/problems/concurrent-modification
+                    title: Действие недоступно
+                    status: 409
+                    detail: Заявка только что изменилась — обновите данные и повторите действие
+
+  /applications/{id}/offer/decline:
+    post:
+      tags: [Applications]
+      summary: Отказаться от предложения
+      operationId: declineOffer
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Заявка в статусе OFFER_DECLINED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/signing/request-code:
+    post:
+      tags: [Applications]
+      summary: Запросить код подписания (моделирование)
+      description: |
+        Моделирование подписи кодом подтверждения внутри интерфейса, без SMS. Разрешено в `OFFER_ACCEPTED`;
+        новый код заменяет прежний. В демо код возвращается в ответе (`demoCode`), чтобы его можно было показать на экране.
+      operationId: requestSigningCode
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Код выпущен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningCodeResponse'
+              example:
+                expiresAt: '2026-10-22T14:15:00+03:00'
+                demoCode: '4821'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /applications/{id}/signing/confirm:
+    post:
+      tags: [Applications]
+      summary: Подписать договор кодом (моделирование)
+      description: |
+        Разрешено в `OFFER_ACCEPTED`. Код действует 5 минут, на ввод — 3 попытки; неверный, просроченный
+        или исчерпавший попытки код — 400 с `errors[{field: code}]` (запросите новый). После подписания (`SIGNED`)
+        бэкенд моделирует выдачу, и заявка переходит в `DISBURSED`.
+      operationId: confirmSigning
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^\d{4}$'
+            example:
+              code: '4821'
+      responses:
+        '200':
+          description: Заявка после подписания
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Уведомления текущего пользователя
+      description: |
+        Уведомления создаются при смене статуса заявки: отправка, запрос сведений, ручная проверка, решение,
+        подтверждение условий, истечение предложения, подписание, выдача. О собственных действиях клиента
+        (принял или отклонил предложение, отменил заявку) уведомлений нет. `unreadNotifications` в списке заявок —
+        непрочитанные уведомления по заявке.
+      operationId: listNotifications
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Страница уведомлений, новые первыми
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+              example:
+                content:
+                  - id: 8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d
+                    type: DECISION_MADE
+                    title: Заявка одобрена
+                    body: 'Одобрено 800 000 ₽ на 2 месяца. Ознакомьтесь с условиями.'
+                    applicationId: 9b2c1d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e
+                    read: false
+                    createdAt: '2026-10-22T14:06:10+03:00'
+                page: 0
+                size: 20
+                totalElements: 1
+                totalPages: 1
+
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Отметить уведомление прочитанным
+      operationId: markNotificationRead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Отмечено (повторная отметка — тоже 204)
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /notifications/stream:
+    get:
+      tags: [Notifications]
+      summary: Поток уведомлений (Server-Sent Events)
+      description: |
+        Для `EventSource`: `event: notification` (данные — схема `Notification`) и `event: ping` раз в 30 секунд.
+        Токен — параметром `access_token`: `EventSource` не умеет заголовки. Сразу после подключения приходит
+        `ping`; при обрыве `EventSource` переподключается сам, пропущенное — в `GET /notifications`.
+        Prism поток не имитирует.
+      operationId: streamNotifications
+      # Генератор не создаёт метод для этой операции: поток отдаётся вручную (SseEmitter)
+      x-internal: true
+      security: []
+      parameters:
+        - name: access_token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Поток событий
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: notification
+                data: {"id":"8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d","type":"DECISION_MADE","title":"Заявка одобрена","body":"Одобрено 800 000 ₽ на 2 месяца.","applicationId":"9b2c1d3e-4f5a-4b6c-8d7e-9f0a1b2c3d4e","read":false,"createdAt":"2026-10-22T14:06:10+03:00"}
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /backoffice/applications:
+    get:
+      tags: [Backoffice]
+      summary: Очередь заявок для сотрудника банка
+      description: |
+        Доступно роли `UNDERWRITER`. Очереди:
+        `REVIEW` — заявки в `MANUAL_REVIEW`; `CONFIRMATION` — в `PENDING_CONFIRMATION` (в обеих — дольше всех
+        ждущие первыми, по `waitingSince`); `ALL` — все отправленные заявки, без черновиков (новые первыми, по
+        `submittedAt`; фильтр `status`). `status` сужает и очереди `REVIEW`/`CONFIRMATION`.
+      operationId: listBackofficeApplications
+      parameters:
+        - name: queue
+          in: query
+          schema:
+            type: string
+            enum: [REVIEW, CONFIRMATION, ALL]
+            default: REVIEW
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Страница заявок
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackofficeApplicationSummaryPage'
+              example:
+                content:
+                  - id: 4f5a6b7c-8d9e-4f0a-8b1c-2d3e4f5a6b7c
+                    number: CR-2026-000127
+                    status: MANUAL_REVIEW
+                    companyName: ООО «Северный ветер»
+                    inn: '7841256395'
+                    productCode: CREDIT_LINE
+                    requestedAmount: '2500000.00'
+                    score: 57
+                    grade: C
+                    reasons:
+                      - { code: SCORE_GREY_ZONE, message: 'Требуется дополнительная проверка специалистом' }
+                    submittedAt: '2026-10-22T16:20:00+03:00'
+                    waitingSince: '2026-10-22T16:20:30+03:00'
+                page: 0
+                size: 20
+                totalElements: 1
+                totalPages: 1
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /backoffice/applications/{id}:
+    get:
+      tags: [Backoffice]
+      summary: Полная карточка заявки для сотрудника банка
+      description: |
+        Заявка, компания, данные внешних источников, скоринг с разбивкой по факторам, запросы сведений, документы
+        и история с именами сотрудников. Данные источников и скоринг — последней проверки заявки.
+      operationId: getBackofficeApplication
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      responses:
+        '200':
+          description: Карточка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackofficeApplicationDetail'
+              example:
+                application:
+                  id: 4f5a6b7c-8d9e-4f0a-8b1c-2d3e4f5a6b7c
+                  number: CR-2026-000127
+                  status: MANUAL_REVIEW
+                  companyId: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                  productCode: CREDIT_LINE
+                  purpose: WORKING_CAPITAL
+                  requestedAmount: '2500000.00'
+                  term: 6
+                  termUnit: MONTHS
+                  fundingMode: TRANCHES
+                  repaymentType: INTEREST_ONLY
+                  financials:
+                    annualRevenue: '17434414.00'
+                    annualExpenses: '15500000.00'
+                    bankMonthlyTurnover: '1450000.00'
+                    monthlyDebtPayment: '380000.00'
+                  collateral: false
+                  subscription: false
+                  reasons:
+                    - { code: SCORE_GREY_ZONE, message: 'Требуется дополнительная проверка специалистом' }
+                  availableActions: [CANCEL]
+                  nextStepHint: Заявку проверяет специалист банка. О решении сообщим в уведомлениях
+                  createdAt: '2026-10-22T16:19:00+03:00'
+                  submittedAt: '2026-10-22T16:20:00+03:00'
+                  updatedAt: '2026-10-22T16:20:30+03:00'
+                company:
+                  id: 3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90
+                  inn: '7841256395'
+                  ogrn: '1217800123452'
+                  businessType: LLC
+                  name: ООО «Северный ветер»
+                  registrationDate: '2021-05-14'
+                  businessAgeMonths: 65
+                  okved: '47.11'
+                  region: Санкт-Петербург
+                  status: ACTIVE
+                enrichment:
+                  sources:
+                    - { source: EGRUL, status: OK, receivedAt: '2026-10-22T16:20:05+03:00' }
+                    - { source: FNS, status: OK, receivedAt: '2026-10-22T16:20:06+03:00' }
+                    - { source: BKI, status: OK, receivedAt: '2026-10-22T16:20:08+03:00' }
+                  taxDebtAmount: '26663.00'
+                  activeCreditsCount: 2
+                  totalDebtAmount: '3500000.00'
+                  maxOverdueDays12m: 12
+                scoring:
+                  score: 57
+                  grade: C
+                  factors:
+                    - { factor: PROFITABILITY, inputValue: '11.1', points: 18, maxPoints: 25, explanation: 'Рентабельность 11,1%' }
+                    - { factor: DEBT_LOAD, inputValue: '26.16', points: 4, maxPoints: 20, explanation: 'Платежи по кредитам за год — 26,16% выручки' }
+                    - { factor: OVERDUE_DAYS, inputValue: '12', points: 10, maxPoints: 20, explanation: 'Максимальная просрочка за 12 месяцев — 12 дней' }
+                    - { factor: TAX_DEBT, inputValue: '26663.00', points: 5, maxPoints: 10, explanation: 'Налоговый долг 26 663 ₽' }
+                    - { factor: BUSINESS_AGE, inputValue: '65', points: 15, maxPoints: 15, explanation: 'Бизнесу 65 месяцев' }
+                    - { factor: ACTIVE_CREDITS, inputValue: '2', points: 5, maxPoints: 10, explanation: '2 действующих кредита' }
+                infoRequests: []
+                documents: []
+                history:
+                  - { fromStatus: SCORING, toStatus: MANUAL_REVIEW, actorType: SYSTEM, comment: 'Балл 57, грейд C. Требуется дополнительная проверка специалистом', createdAt: '2026-10-22T16:20:30+03:00' }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /backoffice/applications/{id}/documents/{documentId}/content:
+    get:
+      tags: [Backoffice]
+      summary: Скачать документ заявки (сотрудник банка)
+      description: Список документов — в карточке (`documents`).
+      operationId: downloadBackofficeDocument
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Файл
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /backoffice/applications/{id}/decision:
+    post:
+      tags: [Backoffice]
+      summary: Ручное решение сотрудника банка
+      description: |
+        Разрешено в `MANUAL_REVIEW` и `PENDING_CONFIRMATION`; `COUNTER_OFFER` и `REJECT` — одноимённые статусы.
+
+        `APPROVE` из `MANUAL_REVIEW` даёт оффер (`APPROVED`). Условия необязательны: не переданы — продукт, сумма
+        и срок из заявки, ставка — из каталога (с подпиской или без, как в заявке). Продукт — только продукт заявки,
+        другой продукт — через `COUNTER_OFFER`. `APPROVE` из `PENDING_CONFIRMATION` подтверждает принятые клиентом
+        условия → `OFFER_ACCEPTED`, условия не передаются (другие условия — через `COUNTER_OFFER`).
+
+        `COUNTER_OFFER`: обязательна сумма `amount`; продукт и срок не переданы — из заявки.
+
+        Условия проверяются по условиям продукта (сумма, срок с учётом подписки заявки, возраст бизнеса) — иначе 400
+        по полям `productCode`, `amount`, `term`. Лимит по финансам сотрудник может превысить, границы продукта — нет.
+        `rate` — не ниже ставки каталога и не выше наибольшей ставки банка (настройка сервера), до сотых; комиссия
+        за подписку — по каталогу. Оффер сотрудника не предварительный:
+        клиент принимает его и сразу подписывает.
+
+        Комментарий обязателен для `REJECT` и `COUNTER_OFFER` и показывается клиенту в причине решения
+        (`MANUAL_REJECT`, `MANUAL_COUNTER_OFFER`) и в истории. `reasonCodes` — коды из справочника `reasonCodes`
+        для учёта решения (другой код — 400 по `reasonCodes[i]`), клиенту не показываются.
+      operationId: makeDecision
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualDecisionRequest'
+            examples:
+              counterOffer:
+                value:
+                  decision: COUNTER_OFFER
+                  productCode: CREDIT_LINE
+                  amount: '1500000.00'
+                  term: 6
+                  termUnit: MONTHS
+                  rate: 25.50
+                  comment: 'Две действующие кредитные линии, снижаем лимит'
+              reject:
+                value:
+                  decision: REJECT
+                  comment: 'Высокая долговая нагрузка'
+                  reasonCodes: [DEBT_LOAD_HIGH]
+              approve:
+                value:
+                  decision: APPROVE
+                  comment: 'Просрочка погашена, обороты стабильные'
+      responses:
+        '200':
+          description: Заявка после решения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /backoffice/applications/{id}/info-requests:
+    post:
+      tags: [Backoffice]
+      summary: Запросить у клиента дополнительную информацию
+      description: |
+        Разрешено в `MANUAL_REVIEW`. Заявка переходит в `NEED_INFO`, клиент видит запрос в `openInfoRequest`.
+        `requestedFields` — поля, которые клиент может изменить после отправки: `purpose`, `fundingMode`,
+        `repaymentType`, `financials.*` (иначе 400 по `requestedFields[i]`). Ответ клиента возвращает заявку
+        в `MANUAL_REVIEW`.
+      operationId: createInfoRequest
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInfoRequest'
+            example:
+              message: Пришлите бухгалтерскую отчётность за последний год
+              requestedFields: []
+              requestedDocuments: [FINANCIAL_STATEMENT]
+      responses:
+        '201':
+          description: Запрос создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InfoRequest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProductCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ProductCode'
+    CompanyId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Ошибка валидации
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://credit.example/problems/validation
+            title: Ошибка валидации
+            status: 400
+            detail: Некоторые поля заполнены неверно
+            errors:
+              - { field: requestedAmount, message: 'Сумма должна быть не меньше 50 000 ₽' }
+    Unauthorized:
+      description: Нет токена или он недействителен
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Нет доступа (чужая заявка или не та роль)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Не найдено
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: |
+        По `type`: `…/invalid-transition` — недопустимо в текущем статусе заявки;
+        `…/concurrent-modification` — заявку только что изменили, обновите её и повторите действие.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          examples:
+            invalidTransition:
+              value:
+                type: https://credit.example/problems/invalid-transition
+                title: Действие недоступно
+                status: 409
+                detail: 'Нельзя принять предложение в статусе REJECTED'
+            concurrentModification:
+              value:
+                type: https://credit.example/problems/concurrent-modification
+                title: Действие недоступно
+                status: 409
+                detail: Заявка только что изменилась — обновите данные и повторите действие
+
+  schemas:
+    Money:
+      type: string
+      pattern: '^\d{1,15}\.\d{2}$'
+      description: Сумма в рублях, строкой с двумя знаками после точки (до 15 цифр до точки)
+      example: '1500000.00'
+
+    Role:
+      type: string
+      enum: [CLIENT, UNDERWRITER]
+
+    ApplicationStatus:
+      type: string
+      description: Статус заявки. Подписи — в `GET /dictionaries`.
+      enum:
+        - DRAFT
+        - SUBMITTED
+        - ENRICHMENT
+        - SCORING
+        - NEED_INFO
+        - MANUAL_REVIEW
+        - APPROVED
+        - COUNTER_OFFER
+        - PENDING_CONFIRMATION
+        - OFFER_ACCEPTED
+        - SIGNED
+        - DISBURSED
+        - REJECTED
+        - OFFER_DECLINED
+        - OFFER_EXPIRED
+        - CANCELLED
+
+    ApplicationAction:
+      type: string
+      description: Действие клиента, доступное в текущем статусе (какие кнопки показывать)
+      enum: [EDIT, SUBMIT, CANCEL, RESPOND_INFO, UPLOAD_DOCUMENT, ACCEPT_OFFER, DECLINE_OFFER, SIGN]
+
+    Purpose:
+      type: string
+      enum: [WORKING_CAPITAL, EQUIPMENT, CASH_GAP, REFINANCING, STARTUP]
+
+    ProductCode:
+      type: string
+      enum: [LUMP_SUM_LOAN, CREDIT_LINE, OVERDRAFT, GAMMA_START]
+
+    FundingMode:
+      type: string
+      enum: [LUMP_SUM, TRANCHES, ON_DEMAND]
+
+    RepaymentType:
+      type: string
+      enum: [ANNUITY, INTEREST_ONLY]
+
+    RateUnit:
+      type: string
+      enum: [PERCENT_PER_YEAR, PERCENT_PER_DAY]
+
+    TermUnit:
+      type: string
+      description: Единица срока. При сравнении сроков в разных единицах месяц считается за 30 дней.
+      enum: [MONTHS, DAYS]
+
+    TermKind:
+      type: string
+      description: |
+        Что ограничивает срок продукта: `LOAN` — срок всего кредита (кредит одной суммой);
+        `TRANCHE` — срок одного транша в рамках договора (линия, овердрафт, Гамма-Старт).
+      enum: [LOAN, TRANCHE]
+
+    BusinessType:
+      type: string
+      enum: [IP, LLC]
+
+    CompanyStatus:
+      type: string
+      enum: [ACTIVE, LIQUIDATING, LIQUIDATED]
+
+    DocumentType:
+      type: string
+      enum: [FINANCIAL_STATEMENT, BANK_STATEMENT, CHARTER, OTHER]
+
+    ActorType:
+      type: string
+      enum: [CLIENT, SYSTEM, EMPLOYEE]
+
+    DemoLoginRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+
+    LoginResponse:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Время жизни токена, секунд
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      required: [id, fullName, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        companies:
+          type: array
+          description: |
+            Компании, с которыми работает клиент; текущая выбирается переключателем в кабинете.
+            Только для роли `CLIENT`, у сотрудника банка поля нет.
+          items:
+            $ref: '#/components/schemas/UserCompany'
+
+    UserCompany:
+      type: object
+      required: [id, name, inn, businessType]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        inn:
+          type: string
+          pattern: '^(\d{10}|\d{12})$'
+        businessType:
+          $ref: '#/components/schemas/BusinessType'
+        demoScenario:
+          type: string
+          description: 'Только в демо — подпись сценария в переключателе компании («Одобрение», «Отказ: просрочка»…)'
+
+    DictionaryItem:
+      type: object
+      required: [code, label]
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+
+    Dictionaries:
+      type: object
+      properties:
+        purposes:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryItem' }
+        fundingModes:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryItem' }
+        repaymentTypes:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryItem' }
+        applicationStatuses:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryItem' }
+        reasonCodes:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryItem' }
+
+    Product:
+      type: object
+      required: [code, name, minAmount, maxAmount, termKind, termUnit, minTerm, maxTerm, autoRenewal, rateUnit, baseRate, fundingModes, repaymentTypes, minBusinessAgeMonths]
+      properties:
+        code:
+          $ref: '#/components/schemas/ProductCode'
+        name:
+          type: string
+        description:
+          type: string
+        minAmount:
+          $ref: '#/components/schemas/Money'
+        maxAmount:
+          $ref: '#/components/schemas/Money'
+        termKind:
+          $ref: '#/components/schemas/TermKind'
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        minTerm:
+          type: integer
+          description: Минимальный срок (кредита или транша — см. `termKind`) в единицах `termUnit`
+        maxTerm:
+          type: integer
+          description: Максимальный срок на базовых условиях
+        maxTermWithSubscription:
+          type: integer
+          description: Максимальный срок с подпиской; нет поля — подписка срок не увеличивает
+        agreementTermMonths:
+          type: integer
+          description: |
+            Срок договора (лимита), месяцев — у линий, где срок ограничивает транш.
+            У кредита одной суммой поля нет: срок договора равен сроку кредита.
+        autoRenewal:
+          type: boolean
+          description: Договор продлевается автоматически
+        rateUnit:
+          $ref: '#/components/schemas/RateUnit'
+        baseRate:
+          type: number
+          description: Базовая ставка, % (в год или в день — см. `rateUnit`). Кнопка «Оформить»
+        rateWithSubscription:
+          type: number
+          description: |
+            Ставка с подпиской, % — показывается серым рядом с базовой. Кнопка «Оформить с подпиской».
+            Нет поля — подписка к продукту недоступна
+        subscriptionDescription:
+          type: string
+          description: Что даёт и сколько стоит подписка — текст для карточки продукта
+        subscriptionFeePercent:
+          type: number
+          description: |
+            Комиссия за подписку, % от суммы кредита (лимита), единоразово при выдаче.
+            Нет поля — подписка без комиссии
+        fundingModes:
+          type: array
+          items: { $ref: '#/components/schemas/FundingMode' }
+        repaymentTypes:
+          type: array
+          items: { $ref: '#/components/schemas/RepaymentType' }
+        minBusinessAgeMonths:
+          type: integer
+
+    ProductRef:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          $ref: '#/components/schemas/ProductCode'
+        name:
+          type: string
+
+    ProductMatchRequest:
+      type: object
+      description: Подписку не передают — подбор проверяет оба варианта сам
+      required: [companyId, purpose, requestedAmount, term, termUnit, fundingMode]
+      properties:
+        companyId:
+          type: string
+          format: uuid
+          description: Компания, для которой подбираем (из `user.companies`)
+        purpose:
+          $ref: '#/components/schemas/Purpose'
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        term:
+          type: integer
+          minimum: 1
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        fundingMode:
+          $ref: '#/components/schemas/FundingMode'
+
+    ProductMatchResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [product, suitable, requiresSubscription, recommended, reasons]
+            properties:
+              product:
+                $ref: '#/components/schemas/ProductRef'
+              suitable:
+                type: boolean
+                description: Подходит на базовых условиях
+              requiresSubscription:
+                type: boolean
+                description: Подходит только с подпиской (при этом `suitable` = false)
+              recommended:
+                type: boolean
+              reasons:
+                type: array
+                description: |
+                  Почему продукт не подходит, а если подходит только с подпиской — почему и что она даёт.
+                  Пусто, если продукт подходит на базовых условиях
+                items:
+                  type: string
+              estimate:
+                allOf: [{ $ref: '#/components/schemas/PaymentEstimate' }]
+                description: Только у подходящих продуктов (`suitable` или `requiresSubscription`)
+
+    PaymentEstimate:
+      type: object
+      required: [repaymentType]
+      description: |
+        Предварительный расчёт платежа по сумме и сроку из подбора — так же, как в предложении. Итоговый платёж —
+        в `offer.monthlyPayment` после решения банка. Для линий и овердрафта — проценты при полном использовании лимита.
+      properties:
+        monthlyPayment:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Без подписки; нет поля, если продукт подходит только с подпиской
+        monthlyPaymentWithSubscription:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: С подпиской; нет поля, если у продукта нет подписки
+        subscriptionFee:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Комиссия за подписку, единоразово при выдаче; нет поля — без комиссии. В платёж не входит
+        repaymentType:
+          allOf: [{ $ref: '#/components/schemas/RepaymentType' }]
+          description: По какому способу погашения посчитано — основной способ продукта
+
+    Company:
+      type: object
+      required: [id, inn, ogrn, businessType, name, registrationDate, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        inn:
+          type: string
+          pattern: '^(\d{10}|\d{12})$'
+        ogrn:
+          type: string
+          pattern: '^(\d{13}|\d{15})$'
+        businessType:
+          $ref: '#/components/schemas/BusinessType'
+        name:
+          type: string
+        registrationDate:
+          type: string
+          format: date
+        businessAgeMonths:
+          type: integer
+          description: Считает бэкенд
+        okved:
+          type: string
+        region:
+          type: string
+        status:
+          $ref: '#/components/schemas/CompanyStatus'
+
+    Financials:
+      type: object
+      description: Финансовые данные из анкеты. Незаполненных полей в ответе нет
+      properties:
+        annualRevenue:
+          $ref: '#/components/schemas/Money'
+        annualExpenses:
+          $ref: '#/components/schemas/Money'
+        bankMonthlyTurnover:
+          $ref: '#/components/schemas/Money'
+        monthlyDebtPayment:
+          $ref: '#/components/schemas/Money'
+
+    ApplicationCreateRequest:
+      type: object
+      description: Черновик заявки. Обязательна только компания, остальное можно заполнить позже через PATCH
+      required: [companyId]
+      properties:
+        companyId:
+          type: string
+          format: uuid
+          description: Компания из `user.companies`; после создания не меняется
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        purpose:
+          $ref: '#/components/schemas/Purpose'
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        term:
+          type: integer
+          minimum: 1
+          description: Срок, который просит клиент; передаётся вместе с `termUnit`
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        fundingMode:
+          $ref: '#/components/schemas/FundingMode'
+        repaymentType:
+          $ref: '#/components/schemas/RepaymentType'
+        financials:
+          $ref: '#/components/schemas/Financials'
+        collateral:
+          type: boolean
+          description: В MVP всегда false
+        subscription:
+          type: boolean
+          description: Кнопка на карточке продукта — «Оформить» (`false`) или «Оформить с подпиской» (`true`)
+
+    ApplicationPatchRequest:
+      type: object
+      description: JSON Merge Patch. `term` и `termUnit` меняются вместе, компанию заявки изменить нельзя.
+      properties:
+        productCode:
+          type: string
+          enum: [LUMP_SUM_LOAN, CREDIT_LINE, OVERDRAFT, GAMMA_START, null]
+          nullable: true
+        purpose:
+          type: string
+          enum: [WORKING_CAPITAL, EQUIPMENT, CASH_GAP, REFINANCING, STARTUP, null]
+          nullable: true
+        requestedAmount:
+          type: string
+          pattern: '^\d{1,15}\.\d{2}$'
+          nullable: true
+          description: Сумма в рублях, строкой с двумя знаками после точки
+        term:
+          type: integer
+          minimum: 1
+          nullable: true
+        termUnit:
+          type: string
+          enum: [MONTHS, DAYS, null]
+          nullable: true
+        fundingMode:
+          type: string
+          enum: [LUMP_SUM, TRANCHES, ON_DEMAND, null]
+          nullable: true
+        repaymentType:
+          type: string
+          enum: [ANNUITY, INTEREST_ONLY, null]
+          nullable: true
+        financials:
+          type: object
+          nullable: true
+          description: Сливается по полям; `null` — очистить все финансовые данные
+          properties:
+            annualRevenue:
+                type: string
+                pattern: '^\d{1,15}\.\d{2}$'
+                nullable: true
+                description: Выручка за последние 12 месяцев
+            annualExpenses:
+                type: string
+                pattern: '^\d{1,15}\.\d{2}$'
+                nullable: true
+                description: Расходы за последние 12 месяцев
+            bankMonthlyTurnover:
+                type: string
+                pattern: '^\d{1,15}\.\d{2}$'
+                nullable: true
+                description: Средние обороты по счёту в банке в месяц
+            monthlyDebtPayment:
+                type: string
+                pattern: '^\d{1,15}\.\d{2}$'
+                nullable: true
+                description: Ежемесячный платёж по текущим кредитам
+        collateral:
+          type: boolean
+          description: В MVP всегда false
+        subscription:
+          type: boolean
+          description: Оформить с подпиской
+
+    Reason:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: OVERDUE_GT_60
+        message:
+          type: string
+          description: Текст для клиента
+        advice:
+          type: string
+          description: |
+            Совет клиенту, что делать дальше («Погасите просрочку и подайте заявку снова через 3 месяца»), — у причин
+            отказа и контрпредложения; нет поля — совета нет. Показывать отдельно от `message`
+
+    Offer:
+      type: object
+      required: [productCode, productName, amount, term, termUnit, termKind, rate, rateUnit, subscription, preliminary, expiresAt]
+      properties:
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        productName:
+          type: string
+        amount:
+          $ref: '#/components/schemas/Money'
+        term:
+          type: integer
+          description: Срок кредита или транша (как `termKind` продукта)
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        termKind:
+          allOf: [{ $ref: '#/components/schemas/TermKind' }]
+          description: |
+            `LOAN` — `term` это срок возврата всей суммы («500 000 ₽ на 24 месяца»); `TRANCHE` — срок одного транша
+            в пределах лимита («лимит 800 000 ₽, транши до 60 дней»)
+        agreementTermMonths:
+          type: integer
+          description: Срок договора (лимита), месяцев; у кредита одной суммой поля нет
+        rate:
+          type: number
+        rateUnit:
+          $ref: '#/components/schemas/RateUnit'
+        monthlyPayment:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: |
+            Ежемесячный платёж (для линий и овердрафта — проценты при полном использовании лимита).
+            Комиссию за подписку не включает
+        subscription:
+          type: boolean
+          description: Одобрено на условиях с подпиской
+        subscriptionFee:
+          allOf: [{ $ref: '#/components/schemas/Money' }]
+          description: Комиссия за подписку, единоразово при выдаче; нет поля — без комиссии
+        preliminary:
+          type: boolean
+          description: true — предварительное одобрение, после согласия клиента условия подтверждает андеррайтер
+        expiresAt:
+          type: string
+          format: date-time
+          description: До какого момента клиент может принять предложение; в `PENDING_CONFIRMATION` не истекает
+
+    InfoRequest:
+      type: object
+      required: [id, message, requestedFields, requestedDocuments, createdBy, createdAt, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        message:
+          type: string
+        requestedFields:
+          type: array
+          description: Поля анкеты, которые нужно заполнить, — путь через точку, как в `ApplicationPatchRequest` (`financials.annualRevenue`)
+          items:
+            type: string
+        requestedDocuments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentType'
+        createdBy:
+          type: string
+          enum: [SYSTEM, EMPLOYEE]
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [OPEN, ANSWERED]
+        response:
+          type: string
+          description: Ответ клиента; нет поля, пока клиент не ответил
+
+    InfoRequestResponse:
+      type: object
+      properties:
+        comment:
+          type: string
+          maxLength: 2000
+        documentIds:
+          type: array
+          description: |
+            Загруженные документы этой заявки, ещё не приложенные к другому ответу (иначе 400 по `documentIds[i]`).
+            Если в запросе есть `requestedDocuments`, нужен хотя бы один документ каждого типа (иначе 400 по
+            `documentIds`)
+          items:
+            type: string
+            format: uuid
+
+    CreateInfoRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          maxLength: 2000
+        requestedFields:
+          type: array
+          items:
+            type: string
+        requestedDocuments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentType'
+
+    Application:
+      type: object
+      required: [id, number, status, companyId, availableActions, reasons, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+          example: CR-2026-000123
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        companyId:
+          type: string
+          format: uuid
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        purpose:
+          $ref: '#/components/schemas/Purpose'
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        term:
+          type: integer
+          description: Срок, который просит клиент, в единицах `termUnit`
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        fundingMode:
+          $ref: '#/components/schemas/FundingMode'
+        repaymentType:
+          $ref: '#/components/schemas/RepaymentType'
+        financials:
+          $ref: '#/components/schemas/Financials'
+        collateral:
+          type: boolean
+        subscription:
+          type: boolean
+          description: Клиент оформляет с подпиской
+        offer:
+          allOf: [{ $ref: '#/components/schemas/Offer' }]
+          description: |
+            Есть в статусах APPROVED, COUNTER_OFFER, PENDING_CONFIRMATION, OFFER_ACCEPTED, SIGNED, DISBURSED
+            и OFFER_EXPIRED (просроченное предложение)
+        openInfoRequest:
+          allOf: [{ $ref: '#/components/schemas/InfoRequest' }]
+          description: Есть в статусе NEED_INFO
+        reasons:
+          type: array
+          description: Причины решения (отказ, ручная проверка, контрпредложение)
+          items:
+            $ref: '#/components/schemas/Reason'
+        availableActions:
+          type: array
+          description: Какие действия доступны клиенту сейчас — по нему фронт показывает кнопки
+          items:
+            $ref: '#/components/schemas/ApplicationAction'
+        nextStepHint:
+          type: string
+          description: Подсказка клиенту, что делать дальше
+        createdAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+          description: Нет поля, пока заявка не отправлена
+        updatedAt:
+          type: string
+          format: date-time
+
+    ApplicationSummary:
+      type: object
+      required: [id, number, status, companyId, companyName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        companyId:
+          type: string
+          format: uuid
+        companyName:
+          type: string
+        purpose:
+          $ref: '#/components/schemas/Purpose'
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        unreadNotifications:
+          type: integer
+
+    StatusHistoryItem:
+      type: object
+      required: [toStatus, actorType, createdAt]
+      properties:
+        fromStatus:
+          allOf: [{ $ref: '#/components/schemas/ApplicationStatus' }]
+          description: Нет поля у первой записи (создание черновика)
+        toStatus:
+          $ref: '#/components/schemas/ApplicationStatus'
+        actorType:
+          $ref: '#/components/schemas/ActorType'
+        actorName:
+          type: string
+          description: Имя сотрудника банка (`actorType = EMPLOYEE`); только в карточке бэк-офиса
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    Document:
+      type: object
+      required: [id, documentType, fileName, mimeType, sizeBytes, uploadedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        documentType:
+          $ref: '#/components/schemas/DocumentType'
+        fileName:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        uploadedAt:
+          type: string
+          format: date-time
+        infoRequestId:
+          type: string
+          format: uuid
+          description: К ответу на какой запрос сведений приложен; нет поля — ещё не приложен
+
+    SigningCodeResponse:
+      type: object
+      required: [expiresAt]
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+        demoCode:
+          type: string
+          description: Только в демо-режиме — код для показа на экране
+
+    Notification:
+      type: object
+      required: [id, type, title, body, read, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [APPLICATION_SUBMITTED, INFO_REQUESTED, DECISION_MADE, OFFER_CONFIRMED, OFFER_EXPIRED, SIGNED, DISBURSED, STATUS_CHANGED]
+        title:
+          type: string
+        body:
+          type: string
+        applicationId:
+          type: string
+          format: uuid
+          description: Нет поля, если уведомление не о заявке
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    ManualDecisionRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, COUNTER_OFFER, REJECT]
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        amount:
+          $ref: '#/components/schemas/Money'
+        term:
+          type: integer
+          minimum: 1
+          description: Передаётся вместе с `termUnit`
+        termUnit:
+          $ref: '#/components/schemas/TermUnit'
+        rate:
+          type: number
+          description: Ставка в единицах продукта (`rateUnit`), до сотых; нет поля — по каталогу
+        comment:
+          type: string
+          maxLength: 2000
+          description: |
+            Этот текст увидит клиент — в причине решения (`MANUAL_REJECT`, `MANUAL_COUNTER_OFFER`) и в истории заявки.
+            Обязателен для `REJECT` и `COUNTER_OFFER`
+        reasonCodes:
+          type: array
+          items:
+            type: string
+
+    BackofficeApplicationSummary:
+      type: object
+      required: [id, number, status, companyName, inn]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        companyName:
+          type: string
+        inn:
+          type: string
+        productCode:
+          $ref: '#/components/schemas/ProductCode'
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        score:
+          type: integer
+          description: Нет поля, если скоринг не считался
+        grade:
+          type: string
+          enum: [A, B, C, D, E]
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reason'
+        submittedAt:
+          type: string
+          format: date-time
+        waitingSince:
+          type: string
+          format: date-time
+          description: С какого момента заявка ждёт в очереди
+
+    SourceResult:
+      type: object
+      required: [source, status]
+      properties:
+        source:
+          type: string
+          enum: [EGRUL, FNS, BKI]
+        status:
+          type: string
+          enum: [OK, NOT_FOUND, ERROR, TIMEOUT]
+        receivedAt:
+          type: string
+          format: date-time
+          description: Нет поля, если источник не ответил
+
+    Enrichment:
+      type: object
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceResult'
+        taxDebtAmount:
+          $ref: '#/components/schemas/Money'
+        activeCreditsCount:
+          type: integer
+        totalDebtAmount:
+          $ref: '#/components/schemas/Money'
+        maxOverdueDays12m:
+          type: integer
+
+    ScoringFactor:
+      type: object
+      required: [factor, points]
+      description: |
+        Фактор скоринга (docs/scoring.md): `PROFITABILITY`, `DEBT_LOAD`, `OVERDUE_DAYS`, `TAX_DEBT`, `BUSINESS_AGE`,
+        `ACTIVE_CREDITS`; `NORMALIZATION` — поправка до шкалы 0–100, когда финансовые факторы не считались.
+        Сумма `points` всех факторов равна `score`.
+      properties:
+        factor:
+          type: string
+          example: OVERDUE_DAYS
+        inputValue:
+          type: string
+          description: Значение, по которому начислены баллы (проценты — числом); нет поля, если входных данных нет
+        points:
+          type: integer
+        maxPoints:
+          type: integer
+          description: Максимум фактора; у `NORMALIZATION` — 0
+        explanation:
+          type: string
+
+    Scoring:
+      type: object
+      required: [score, factors]
+      properties:
+        score:
+          type: integer
+        grade:
+          type: string
+          enum: [A, B, C, D, E]
+        factors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoringFactor'
+
+    BackofficeApplicationDetail:
+      type: object
+      required: [application, company, infoRequests, documents, history]
+      properties:
+        application:
+          $ref: '#/components/schemas/Application'
+        company:
+          $ref: '#/components/schemas/Company'
+        enrichment:
+          $ref: '#/components/schemas/Enrichment'
+        scoring:
+          allOf: [{ $ref: '#/components/schemas/Scoring' }]
+          description: Нет поля, если скоринг не считался (например, источник не ответил)
+        infoRequests:
+          type: array
+          description: Все запросы сведений по заявке, старые первыми
+          items:
+            $ref: '#/components/schemas/InfoRequest'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusHistoryItem'
+
+    PageMeta:
+      type: object
+      required: [page, size, totalElements, totalPages]
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    ApplicationSummaryPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/ApplicationSummary'
+
+    BackofficeApplicationSummaryPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/BackofficeApplicationSummary'
+
+    NotificationPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [content]
+          properties:
+            content:
+              type: array
+              items:
+                $ref: '#/components/schemas/Notification'
+
+    Problem:
+      type: object
+      description: Problem Details (RFC 9457)
+      required: [title, status]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          description: Только для `…/offer-expired` — до какого момента действовало предложение
+        errors:
+          type: array
+          description: Ошибки по полям (для 400)
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field:
+                type: string
+                description: Путь к полю через точку (`financials.annualRevenue`), у элемента массива — с индексом (`documentIds[0]`)
+                example: financials.annualRevenue
+              message:
+                type: string

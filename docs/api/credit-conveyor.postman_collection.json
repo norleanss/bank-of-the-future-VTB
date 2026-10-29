@@ -1,0 +1,4151 @@
+{
+  "info": {
+    "_postman_id": "e63a0c24-bc74-4ae7-a0c8-c929856d717c",
+    "name": "Кредитный конвейер МСБ — демо-сценарии",
+    "description": "Демо-сценарии клиента и андеррайтера с автопроверками.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "companyId",
+      "value": ""
+    },
+    {
+      "key": "appId",
+      "value": ""
+    },
+    {
+      "key": "uwToken",
+      "value": ""
+    },
+    {
+      "key": "requestId",
+      "value": ""
+    },
+    {
+      "key": "demoCode",
+      "value": ""
+    },
+    {
+      "key": "pollCount",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Северный ветер — одобрение, подписание, выдача",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Северный ветер»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '7841256395');",
+                  "pm.test('Компания «Северный ветер» есть у клиента', () => pm.expect(c, 'компания с ИНН 7841256395').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"500000.00\",\n  \"term\": 24,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Не предварительное', () => pm.expect(a.offer && a.offer.preliminary).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Принять предложение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Принять предложение: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: OFFER_ACCEPTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('OFFER_ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить код подписания",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/request-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "request-code"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Код получен', () => pm.response.to.be.success);",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('demoCode', r.demoCode);",
+                  "console.log('Код:', r.demoCode, 'действует до', r.expiresAt);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Неверный код",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"0000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Если демо-код случайно оказался 0000 — берём другой неверный",
+                  "if (pm.collectionVariables.get('demoCode') === '0000') pm.request.body.raw = JSON.stringify({code: '1111'});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Неверный код отклонён: 4xx', () => pm.expect(pm.response.code).to.be.within(400, 499));",
+                  "console.log(pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписать верным кодом",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{demoCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Подписано: 2xx', () => pm.response.to.be.success);",
+                  "console.log('Статус после подписания:', pm.response.json().status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать выдачи → DISBURSED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SIGNED\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: DISBURSED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('DISBURSED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Северный ветер — контрпредложение",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Северный ветер»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '7841256395');",
+                  "pm.test('Компания «Северный ветер» есть у клиента', () => pm.expect(c, 'компания с ИНН 7841256395').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"12000000.00\",\n  \"term\": 36,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → COUNTER_OFFER",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: COUNTER_OFFER (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('COUNTER_OFFER'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина AMOUNT_ABOVE_LIMIT', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('AMOUNT_ABOVE_LIMIT'));",
+                  "pm.test('Сумма = лимит 9 400 000', () => pm.expect(a.offer.amount).to.eql('9400000.00'));",
+                  "pm.test('Предварительное (> 1 млн)', () => pm.expect(a.offer.preliminary).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Принять контрпредложение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Принять контрпредложение: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: PENDING_CONFIRMATION (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('PENDING_CONFIRMATION'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Северный ветер — запрос сведений",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Северный ветер»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '7841256395');",
+                  "pm.test('Компания «Северный ветер» есть у клиента', () => pm.expect(c, 'компания с ИНН 7841256395').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"500000.00\",\n  \"term\": 24,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → NEED_INFO",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: NEED_INFO (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('NEED_INFO'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина MISSING_FIELDS', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('MISSING_FIELDS'));",
+                  "pm.collectionVariables.set('requestId', a.openInfoRequest.id);",
+                  "console.log('Банк просит:', JSON.stringify(a.openInfoRequest.requestedFields));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Попробовать изменить сумму (нельзя)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestedAmount\": \"700000.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Сумму после отправки менять нельзя: 400', () => pm.response.to.have.status(400));",
+                  "console.log(pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Дозаполнить финансы",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Дозаполнить финансы: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: NEED_INFO (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('NEED_INFO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ответить на запрос банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/info-requests/{{requestId}}/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "info-requests",
+                "{{requestId}}",
+                "response"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Дозаполнил финансовые данные\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ответ принят: 2xx', () => pm.response.to.be.success);",
+                  "console.log('Статус:', pm.response.json().status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Морозов — ручная проверка",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Морозов",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '526218493785');",
+                  "pm.test('Компания ИП Морозов есть у клиента', () => pm.expect(c, 'компания с ИНН 526218493785').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"1000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"12000000.00\",\n    \"annualExpenses\": \"9000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → MANUAL_REVIEW",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: MANUAL_REVIEW (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('MANUAL_REVIEW'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина OVERDUE_31_60', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('OVERDUE_31_60'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Альтаир — отказ по просрочке",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Альтаир»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '6673482158');",
+                  "pm.test('Компания «Альтаир» есть у клиента', () => pm.expect(c, 'компания с ИНН 6673482158').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"3000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"30000000.00\",\n    \"annualExpenses\": \"24000000.00\",\n    \"monthlyDebtPayment\": \"150000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → REJECTED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: REJECTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('REJECTED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина OVERDUE_GT_60', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('OVERDUE_GT_60'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. ТехноПром — предварительное одобрение",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «ТехноПром»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '5406217388');",
+                  "pm.test('Компания «ТехноПром» есть у клиента', () => pm.expect(c, 'компания с ИНН 5406217388').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"5000000.00\",\n  \"term\": 36,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"60000000.00\",\n    \"annualExpenses\": \"48000000.00\",\n    \"monthlyDebtPayment\": \"200000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "pm.test('Предварительное (> 1 млн)', () => pm.expect(a.offer.preliminary).to.eql(true));",
+                  "pm.test('Платёж 194 854,03', () => pm.expect(a.offer.monthlyPayment).to.eql('194854.03'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Принять предложение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Принять предложение: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: PENDING_CONFIRMATION (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('PENDING_CONFIRMATION'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Соколова — Гамма-Старт",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Соколова",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '165809341759');",
+                  "pm.test('Компания ИП Соколова есть у клиента', () => pm.expect(c, 'компания с ИНН 165809341759').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"GAMMA_START\",\n  \"purpose\": \"STARTUP\",\n  \"requestedAmount\": \"500000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Соколова — кредит не по возрасту бизнеса",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Соколова",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '165809341759');",
+                  "pm.test('Компания ИП Соколова есть у клиента', () => pm.expect(c, 'компания с ИНН 165809341759').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"800000.00\",\n  \"term\": 12,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 400', () => pm.expect(pm.response.code).to.eql(400));",
+                  "console.log('Ответ на отправку:', pm.response.text());",
+                  "pm.test('Текст про возраст бизнеса', () => pm.expect(pm.response.text()).to.include('12 месяцев'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Вектор-Строй — отказ: ликвидация",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Вектор-Строй»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '7724185366');",
+                  "pm.test('Компания «Вектор-Строй» есть у клиента', () => pm.expect(c, 'компания с ИНН 7724185366').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"2000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"25000000.00\",\n    \"annualExpenses\": \"20000000.00\",\n    \"monthlyDebtPayment\": \"100000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → REJECTED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: REJECTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('REJECTED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина COMPANY_LIQUIDATING', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('COMPANY_LIQUIDATING'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Андеррайтер: ручная проверка → одобрение → выдача",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Морозов",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '526218493785');",
+                  "pm.test('Компания ИП Морозов есть у клиента', () => pm.expect(c, 'компания с ИНН 526218493785').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"1000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"12000000.00\",\n    \"annualExpenses\": \"9000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → MANUAL_REVIEW",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: MANUAL_REVIEW (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('MANUAL_REVIEW'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход сотрудником банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"UNDERWRITER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход сотрудника: 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('uwToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь REVIEW",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications?queue=REVIEW",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications?queue=REVIEW"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Очередь: 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().content || [];",
+                  "const me = items.find(i => i.id === pm.collectionVariables.get('appId'));",
+                  "pm.test('Заявка в очереди REVIEW', () => pm.expect(me).to.be.ok);",
+                  "if (me) console.log('В очереди:', me.number, me.companyName, 'балл', me.score, me.grade, 'ждёт с', me.waitingSince);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Карточка заявки",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Карточка: 200', () => pm.response.to.have.status(200));",
+                  "const c = pm.response.json();",
+                  "pm.test('Есть данные источников', () => pm.expect(c.enrichment).to.be.ok);",
+                  "pm.test('Есть балл с разбивкой', () => pm.expect(c.scoring && c.scoring.factors).to.be.an('array').that.is.not.empty);",
+                  "if (c.scoring) console.log('Балл', c.scoring.score, c.scoring.grade, c.scoring.factors.map(f => f.factor + ' ' + f.points + '/' + f.maxPoints).join(', '));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент не может принимать решения (403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Клиенту 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Одобрить на условиях заявки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Решение принято: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент видит одобрение",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Не предварительное', () => pm.expect(a.offer.preliminary).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент принимает",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Клиент принимает: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: OFFER_ACCEPTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('OFFER_ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить код подписания",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/request-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "request-code"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Код получен', () => pm.response.to.be.success);",
+                  "pm.collectionVariables.set('demoCode', pm.response.json().demoCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписать",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{demoCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Подписано: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать выдачи → DISBURSED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SIGNED\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: DISBURSED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('DISBURSED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Андеррайтер: контрпредложение",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Морозов",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '526218493785');",
+                  "pm.test('Компания ИП Морозов есть у клиента', () => pm.expect(c, 'компания с ИНН 526218493785').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"1000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"12000000.00\",\n    \"annualExpenses\": \"9000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → MANUAL_REVIEW",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: MANUAL_REVIEW (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('MANUAL_REVIEW'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход сотрудником банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"UNDERWRITER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход сотрудника: 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('uwToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Контрпредложение на 700 000",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"COUNTER_OFFER\",\n  \"amount\": \"700000.00\",\n  \"comment\": \"Можем предложить 700 000 ₽ с учётом текущей долговой нагрузки\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Решение принято: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент видит контрпредложение",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: COUNTER_OFFER (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('COUNTER_OFFER'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина MANUAL_COUNTER_OFFER', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('MANUAL_COUNTER_OFFER'));",
+                  "pm.test('Сумма 700 000', () => pm.expect(a.offer.amount).to.eql('700000.00'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12. Андеррайтер: запрос сведений → отказ",
+      "item": [
+        {
+          "name": "Вход клиентом, компания ИП Морозов",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '526218493785');",
+                  "pm.test('Компания ИП Морозов есть у клиента', () => pm.expect(c, 'компания с ИНН 526218493785').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"CREDIT_LINE\",\n  \"purpose\": \"WORKING_CAPITAL\",\n  \"requestedAmount\": \"1000000.00\",\n  \"term\": 6,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"TRANCHES\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"12000000.00\",\n    \"annualExpenses\": \"9000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → MANUAL_REVIEW",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: MANUAL_REVIEW (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('MANUAL_REVIEW'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход сотрудником банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"UNDERWRITER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход сотрудника: 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('uwToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить сведения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/info-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "info-requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Уточните, пожалуйста, выручку за последние 12 месяцев\",\n  \"requestedFields\": [\n    \"financials.annualRevenue\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Запрос создан: 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент видит запрос",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: NEED_INFO (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('NEED_INFO'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.collectionVariables.set('requestId', a.openInfoRequest.id); console.log('Банк просит:', a.openInfoRequest.message);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент уточняет выручку",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"financials\": {\n    \"annualRevenue\": \"11500000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Клиент уточняет выручку: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: NEED_INFO (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('NEED_INFO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент отвечает на запрос",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/info-requests/{{requestId}}/response",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "info-requests",
+                "{{requestId}}",
+                "response"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Уточнил выручку\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ответ принят: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Заявка вернулась к андеррайтеру",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: MANUAL_REVIEW (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('MANUAL_REVIEW'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отказать с комментарием",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\",\n  \"comment\": \"Отказ: просрочка 45 дней и высокая долговая нагрузка\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Решение принято: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент видит отказ",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: REJECTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('REJECTED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Причина MANUAL_REJECT', () => pm.expect((a.reasons || []).map(r => r.code)).to.include('MANUAL_REJECT'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "13. Андеррайтер: подтверждение крупной суммы",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «ТехноПром»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '5406217388');",
+                  "pm.test('Компания «ТехноПром» есть у клиента', () => pm.expect(c, 'компания с ИНН 5406217388').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"LUMP_SUM_LOAN\",\n  \"purpose\": \"EQUIPMENT\",\n  \"requestedAmount\": \"5000000.00\",\n  \"term\": 36,\n  \"termUnit\": \"MONTHS\",\n  \"fundingMode\": \"LUMP_SUM\",\n  \"repaymentType\": \"ANNUITY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"60000000.00\",\n    \"annualExpenses\": \"48000000.00\",\n    \"monthlyDebtPayment\": \"200000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    pm.test('Предварительное', () => pm.expect(a.offer.preliminary).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент принимает",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Клиент принимает: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: PENDING_CONFIRMATION (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('PENDING_CONFIRMATION'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Вход сотрудником банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"UNDERWRITER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход сотрудника: 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('uwToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Очередь CONFIRMATION",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications?queue=CONFIRMATION",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications?queue=CONFIRMATION"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Очередь: 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().content || [];",
+                  "const me = items.find(i => i.id === pm.collectionVariables.get('appId'));",
+                  "pm.test('Заявка в очереди CONFIRMATION', () => pm.expect(me).to.be.ok);",
+                  "if (me) console.log('В очереди:', me.number, me.companyName, 'балл', me.score, me.grade, 'ждёт с', me.waitingSince);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подтвердить предварительное одобрение",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/backoffice/applications/{{appId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "backoffice",
+                "applications",
+                "{{appId}}",
+                "decision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{uwToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Решение принято: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Клиент может подписывать",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: OFFER_ACCEPTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('OFFER_ACCEPTED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить код подписания",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/request-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "request-code"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Код получен', () => pm.response.to.be.success);",
+                  "pm.collectionVariables.set('demoCode', pm.response.json().demoCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписать",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{demoCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Подписано: 2xx', () => pm.response.to.be.success);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать выдачи → DISBURSED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SIGNED\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: DISBURSED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('DISBURSED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

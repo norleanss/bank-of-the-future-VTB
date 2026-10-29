@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/egrul/companies/7724185366"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "7724185366",
+      "ogrn": "1187746182733",
+      "businessType": "LLC",
+      "name": "ООО «Вектор-Строй»",
+      "registrationDate": "2018-03-20",
+      "status": "LIQUIDATING",
+      "okved": "41.20",
+      "region": "Москва"
+    }
+  }
+}

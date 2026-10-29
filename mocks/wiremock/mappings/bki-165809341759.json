@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/bki/companies/165809341759/credit-report"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "inn": "165809341759",
+      "activeCreditsCount": 0,
+      "totalDebtAmount": "0.00",
+      "maxOverdueDays12m": 0
+    }
+  }
+}

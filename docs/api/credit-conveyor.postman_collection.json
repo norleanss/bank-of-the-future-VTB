@@ -4146,6 +4146,559 @@
           ]
         }
       ]
+    },
+    {
+      "name": "14. Северный ветер — овердрафт, без подписки и с подпиской",
+      "item": [
+        {
+          "name": "Вход клиентом, компания «Северный ветер»",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo-login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo-login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"CLIENT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Вход: 200', () => pm.response.to.have.status(200));",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('token', r.accessToken);",
+                  "const c = (r.user.companies || []).find(c => c.inn === '7841256395');",
+                  "pm.test('Компания «Северный ветер» есть у клиента', () => pm.expect(c, 'компания с ИНН 7841256395').to.be.ok);",
+                  "if (c) pm.collectionVariables.set('companyId', c.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку: овердрафт 800 000 ₽ на 60 дней, без подписки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"OVERDRAFT\",\n  \"purpose\": \"CASH_GAP\",\n  \"requestedAmount\": \"800000.00\",\n  \"term\": 60,\n  \"termUnit\": \"DAYS\",\n  \"fundingMode\": \"ON_DEMAND\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\",\n    \"bankMonthlyTurnover\": \"2000000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED, 26%, 17 333,33 ₽ в месяц",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    const o = a.offer || {};",
+                  "    pm.test('Сумма 800 000 (лимит по оборотам 1 000 000)', () => pm.expect(o.amount).to.eql('800000.00'));",
+                  "    pm.test('Транш 60 дней', () => { pm.expect(o.term).to.eql(60); pm.expect(o.termUnit).to.eql('DAYS'); pm.expect(o.termKind).to.eql('TRANCHE'); });",
+                  "    pm.test('Ставка 26% годовых без подписки', () => { pm.expect(o.rate).to.eql(26); pm.expect(o.subscription).to.eql(false); });",
+                  "    pm.test('Проценты в месяц 17 333,33, без комиссии', () => { pm.expect(o.monthlyPayment).to.eql('17333.33'); pm.expect(o.subscriptionFee).to.be.undefined; });",
+                  "    pm.test('Не предварительное', () => pm.expect(a.offer && a.offer.preliminary).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Принять предложение",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/offer/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "offer",
+                "accept"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Принять предложение: 2xx', () => pm.response.to.be.success);",
+                  "const a = pm.response.json();",
+                  "pm.test('Статус: OFFER_ACCEPTED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('OFFER_ACCEPTED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить код подписания",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/request-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "request-code"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Код получен', () => pm.response.to.be.success);",
+                  "const r = pm.response.json();",
+                  "pm.collectionVariables.set('demoCode', r.demoCode);",
+                  "console.log('Код:', r.demoCode, 'действует до', r.expiresAt);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подписать верным кодом",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/signing/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "signing",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"{{demoCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Подписано: 2xx', () => pm.response.to.be.success);",
+                  "console.log('Статус после подписания:', pm.response.json().status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать выдачи → DISBURSED",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SIGNED\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: DISBURSED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('DISBURSED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    ",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку: транш 90 дней без подписки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"OVERDRAFT\",\n  \"purpose\": \"CASH_GAP\",\n  \"requestedAmount\": \"800000.00\",\n  \"term\": 90,\n  \"termUnit\": \"DAYS\",\n  \"fundingMode\": \"ON_DEMAND\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": false,\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\",\n    \"bankMonthlyTurnover\": \"2000000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить без подписки → 400: 90 дней только с подпиской",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 400', () => pm.expect(pm.response.code).to.eql(400));",
+                  "const e = (pm.response.json().errors || []).find(x => x.field === 'term');",
+                  "pm.test('Ошибка по полю term: только с подпиской', () => pm.expect(e && e.message).to.include('только с подпиской'));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Создать заявку: транш 90 дней с подпиской",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyId\": \"{{companyId}}\",\n  \"productCode\": \"OVERDRAFT\",\n  \"purpose\": \"CASH_GAP\",\n  \"requestedAmount\": \"800000.00\",\n  \"term\": 90,\n  \"termUnit\": \"DAYS\",\n  \"fundingMode\": \"ON_DEMAND\",\n  \"repaymentType\": \"INTEREST_ONLY\",\n  \"collateral\": false,\n  \"subscription\": true,\n  \"financials\": {\n    \"annualRevenue\": \"20000000.00\",\n    \"annualExpenses\": \"14000000.00\",\n    \"monthlyDebtPayment\": \"50000.00\",\n    \"bankMonthlyTurnover\": \"2000000.00\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Заявка создана: 201', () => pm.response.to.have.status(201));",
+                  "const a = pm.response.json();",
+                  "pm.collectionVariables.set('appId', a.id);",
+                  "console.log('Заявка', a.number || a.id, a.status);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}/submit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}",
+                "submit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Отправка: 202', () => pm.expect(pm.response.code).to.eql(202));",
+                  "console.log('Ответ на отправку:', pm.response.text());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ждать результата → APPROVED, 13%, комиссия 8 000 ₽",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/applications/{{appId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "applications",
+                "{{appId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "setTimeout(() => {}, 1000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const a = pm.response.json();",
+                  "const processing = [\"SUBMITTED\", \"ENRICHMENT\", \"SCORING\"];",
+                  "const n = Number(pm.collectionVariables.get('pollCount') || 0);",
+                  "if (processing.includes(a.status) && n < 20) {",
+                  "    // В Collection Runner запрос повторится сам; при ручном запуске нажмите Send ещё раз",
+                  "    pm.collectionVariables.set('pollCount', n + 1);",
+                  "    postman.setNextRequest(pm.info.requestName);",
+                  "    console.log('Ещё в обработке:', a.status);",
+                  "} else {",
+                  "    pm.collectionVariables.set('pollCount', 0);",
+                  "    pm.test('Статус: APPROVED (сейчас ' + a.status + ')', () => pm.expect(a.status).to.eql('APPROVED'));",
+                  "    if (a.reasons) console.log('Причины:', a.reasons.map(r => r.code + ' — ' + r.message).join('; '));",
+                  "    if (a.offer) console.log('Предложение:', JSON.stringify(a.offer));",
+                  "    const o = a.offer || {};",
+                  "    pm.test('Сумма 800 000', () => pm.expect(o.amount).to.eql('800000.00'));",
+                  "    pm.test('Транш 90 дней', () => { pm.expect(o.term).to.eql(90); pm.expect(o.termUnit).to.eql('DAYS'); });",
+                  "    pm.test('Ставка 13% с подпиской', () => { pm.expect(o.rate).to.eql(13); pm.expect(o.subscription).to.eql(true); });",
+                  "    pm.test('Проценты в месяц 8 666,67', () => pm.expect(o.monthlyPayment).to.eql('8666.67'));",
+                  "    pm.test('Комиссия за подписку 8 000 (1%)', () => pm.expect(o.subscriptionFee).to.eql('8000.00'));",
+                  "    pm.test('Не предварительное', () => pm.expect(a.offer && a.offer.preliminary).to.eql(false));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
